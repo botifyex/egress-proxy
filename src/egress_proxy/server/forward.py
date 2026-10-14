@@ -1,19 +1,25 @@
 import hmac
+import ssl
 from collections.abc import AsyncIterator
 from typing import TypeAlias
 
-import httpx
-from starlette.background import BackgroundTask
-from starlette.requests import Request
-from starlette.responses import Response, StreamingResponse
+import aiohttp
+import certifi
+from yarl import URL
 
 from egress_proxy.protocol import Failure, Header
+from egress_proxy.server.asgi import Receive, Scope, Send
 from egress_proxy.server.rejection import Rejection
 from egress_proxy.server.settings import Proxy
 
 Pairs: TypeAlias = list[tuple[bytes, bytes]]
+Headers: TypeAlias = dict[bytes, bytes]
 
 SCHEMES = frozenset({"http", "https"})
+
+METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
+
+AUTOMATIC = ("User-Agent", "Accept", "Accept-Encoding", "Content-Type")
 
 HOP = frozenset(
     {
@@ -52,71 +58,109 @@ REQUEST_EXCLUDED = HOP | IDENTIFYING | PRIVATE | {"host"}
 
 RESPONSE_EXCLUDED = HOP | PRIVATE
 
+KEY = Header.KEY.encode()
+
+TARGET = Header.TARGET.encode()
+
 
 def filtered(pairs: Pairs, excluded: frozenset[str]) -> Pairs:
     return [(name, value) for name, value in pairs if name.decode("latin-1").lower() not in excluded]
 
 
-class Forward:
-    def __init__(self, transport: httpx.AsyncBaseTransport, proxy: Proxy) -> None:
-        self.transport = transport
-        self.proxy = proxy
+def decoded(pairs: Pairs) -> list[tuple[str, str]]:
+    return [(name.decode("latin-1"), value.decode("latin-1")) for name, value in pairs]
 
-    def authorize(self, request: Request) -> None:
-        given = request.headers.get(Header.KEY, "").encode()
-        expected = self.proxy.key.get_secret_value().encode()
-        if not hmac.compare_digest(given, expected):
+
+def session(proxy: Proxy) -> aiohttp.ClientSession:
+    return aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(
+            limit=0,
+            ttl_dns_cache=300,
+            ssl=ssl.create_default_context(cafile=certifi.where()),
+        ),
+        cookie_jar=aiohttp.DummyCookieJar(),
+        auto_decompress=False,
+        skip_auto_headers=AUTOMATIC,
+        timeout=aiohttp.ClientTimeout(total=None, sock_connect=proxy.connect, sock_read=proxy.timeout),
+    )
+
+
+async def chunks(receive: Receive) -> AsyncIterator[bytes]:
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            return
+        if message.get("body"):
+            yield message["body"]
+        if not message.get("more_body", False):
+            return
+
+
+class Forward:
+    def __init__(self, client: aiohttp.ClientSession, proxy: Proxy) -> None:
+        self.client = client
+        self.key = proxy.key.get_secret_value().encode()
+
+    def authorize(self, headers: Headers) -> None:
+        if not hmac.compare_digest(headers.get(KEY, b""), self.key):
             raise Rejection(Failure.UNAUTHORIZED, "egress key is missing or invalid")
 
-    def target(self, request: Request) -> httpx.URL:
-        value = request.headers.get(Header.TARGET)
+    def method(self, scope: Scope) -> str:
+        method: str = scope["method"]
+        if method not in METHODS:
+            raise Rejection(Failure.INVALID, f"method {method} is not supported")
+        return method
+
+    def target(self, headers: Headers) -> URL:
+        value = headers.get(TARGET)
         if value is None:
             raise Rejection(Failure.INVALID, f"'{Header.TARGET}' header is required")
+        text = value.decode("latin-1")
         try:
-            url = httpx.URL(value)
-        except httpx.InvalidURL as error:
-            raise Rejection(Failure.INVALID, f"'{value}' is not a valid url") from error
+            url = URL(text, encoded=True)
+        except ValueError as error:
+            raise Rejection(Failure.INVALID, f"'{text}' is not a valid url") from error
         if url.scheme not in SCHEMES or not url.host:
-            raise Rejection(Failure.INVALID, f"'{value}' must be an absolute http or https url")
+            raise Rejection(Failure.INVALID, f"'{text}' must be an absolute http or https url")
         return url
 
-    def body(self, request: Request) -> AsyncIterator[bytes] | None:
-        if "content-length" in request.headers or "transfer-encoding" in request.headers:
-            return request.stream()
+    def body(self, headers: Headers, receive: Receive) -> AsyncIterator[bytes] | None:
+        if b"content-length" in headers or b"transfer-encoding" in headers:
+            return chunks(receive)
         return None
 
-    def timeout(self) -> httpx.Timeout:
-        return httpx.Timeout(self.proxy.timeout, connect=self.proxy.connect)
-
-    def build(self, request: Request) -> httpx.Request:
-        return httpx.Request(
-            request.method,
-            self.target(request),
-            headers=filtered(request.headers.raw, REQUEST_EXCLUDED),
-            content=self.body(request),
-            extensions={"timeout": self.timeout().as_dict()},
-        )
-
-    async def send(self, upstream: httpx.Request) -> httpx.Response:
+    async def request(self, scope: Scope, receive: Receive) -> aiohttp.ClientResponse:
+        headers: Headers = dict(scope["headers"])
+        self.authorize(headers)
+        method = self.method(scope)
+        url = self.target(headers)
         try:
-            return await self.transport.handle_async_request(upstream)
-        except httpx.TimeoutException as error:
-            raise Rejection(Failure.TIMEOUT, f"{upstream.url} timed out") from error
-        except httpx.TransportError as error:
-            raise Rejection(Failure.UNREACHABLE, f"{upstream.url} is unreachable") from error
+            return await self.client.request(
+                method,
+                url,
+                headers=decoded(filtered(scope["headers"], REQUEST_EXCLUDED)),
+                data=self.body(headers, receive),
+                allow_redirects=False,
+            )
+        except TimeoutError as error:
+            raise Rejection(Failure.TIMEOUT, f"{url} timed out") from error
+        except aiohttp.ClientError as error:
+            raise Rejection(Failure.UNREACHABLE, f"{url} is unreachable") from error
 
-    def relay(self, upstream: httpx.Response) -> Response:
-        response = StreamingResponse(
-            upstream.aiter_raw(),
-            status_code=upstream.status_code,
-            background=BackgroundTask(upstream.aclose),
-        )
-        response.raw_headers = filtered(upstream.headers.raw, RESPONSE_EXCLUDED)
-        return response
+    async def relay(self, upstream: aiohttp.ClientResponse, send: Send) -> None:
+        headers = filtered(list(upstream.raw_headers), RESPONSE_EXCLUDED)
+        await send({"type": "http.response.start", "status": upstream.status, "headers": headers})
+        async for chunk in upstream.content.iter_any():
+            await send({"type": "http.response.body", "body": chunk, "more_body": True})
+        await send({"type": "http.response.body", "body": b""})
 
-    async def handle(self, request: Request) -> Response:
+    async def handle(self, scope: Scope, receive: Receive, send: Send) -> None:
         try:
-            self.authorize(request)
-            return self.relay(await self.send(self.build(request)))
+            upstream = await self.request(scope, receive)
         except Rejection as rejection:
-            return rejection.response()
+            await rejection.send(send)
+            return
+        try:
+            await self.relay(upstream, send)
+        finally:
+            upstream.release()

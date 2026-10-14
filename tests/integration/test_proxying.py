@@ -5,8 +5,8 @@ import httpx
 import pytest
 
 from egress_proxy.client import AsyncClient, AsyncTransport, Client, Refused
-from tests.conftest import KEY
-from tests.upstream import COMPRESSED
+from tests.support.servers import KEY
+from tests.support.upstream import COMPRESSED
 
 
 async def test_asynchronous_client_round_trip(egress: str, target: str) -> None:

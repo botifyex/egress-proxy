@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from egress_proxy.server.settings import Proxy, Server
 
-EXAMPLE = Path(__file__).parent.parent / ".env.example"
+EXAMPLE = Path(__file__).parents[2] / ".env.example"
 
 
 def names(path: Path) -> set[str]:

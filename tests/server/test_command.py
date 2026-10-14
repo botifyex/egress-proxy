@@ -1,4 +1,5 @@
 import importlib
+import socket
 import sys
 
 import pytest
@@ -15,6 +16,7 @@ def run(monkeypatch: pytest.MonkeyPatch, *arguments: str) -> list[str]:
         captured.extend(args)
 
     monkeypatch.setattr(uvicorn.main, "main", fake)
+    monkeypatch.setattr(uvicorn.Config, "bind_socket", uvicorn.Config.bind_socket)
     monkeypatch.setattr(sys, "argv", ["egress-proxy", *arguments])
     monkeypatch.setattr(main, "Server", lambda: Server(host="10.0.0.1", port=7000))
     main.run()
@@ -56,3 +58,41 @@ def test_factory_resolves_to_application(monkeypatch: pytest.MonkeyPatch) -> Non
     module, name = main.FACTORY.split(":")
     factory = getattr(importlib.import_module(module), name)
     assert callable(factory())
+
+
+def test_access_log_is_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert "--no-access-log" in run(monkeypatch)
+
+
+def test_access_log_can_be_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    arguments = run(monkeypatch, "--access-log")
+    assert arguments.index("--access-log") > arguments.index("--no-access-log")
+
+
+def test_listening_socket_disables_nagle() -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        main.nodelay(listener)
+        assert listener.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY) != 0
+
+
+def test_unix_socket_is_left_untouched() -> None:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        assert main.nodelay(listener) is listener
+
+
+def test_bound_sockets_disable_nagle(monkeypatch: pytest.MonkeyPatch) -> None:
+    created: list[socket.socket] = []
+
+    def bind(config: uvicorn.Config) -> socket.socket:
+        created.append(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+        return created[-1]
+
+    listener = main.immediate(bind)(uvicorn.Config(app=main.FACTORY))
+    assert listener.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY) != 0
+    listener.close()
+
+
+def test_run_installs_nagle_fix(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = uvicorn.Config.bind_socket
+    run(monkeypatch)
+    assert uvicorn.Config.bind_socket is not original

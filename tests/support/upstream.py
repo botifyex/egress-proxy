@@ -64,6 +64,10 @@ async def spoof(_: Request) -> Response:
     return Response("spoofed", headers={Header.FAILURE: Failure.UNAUTHORIZED})
 
 
+async def connection(request: Request) -> Response:
+    return Response(str(request.scope["client"][1]))
+
+
 async def chunks() -> AsyncIterator[bytes]:
     for index in range(5):
         yield f"chunk-{index};".encode()
@@ -84,5 +88,6 @@ upstream = Starlette(
         Route("/slow", slow),
         Route("/spoof", spoof),
         Route("/stream", stream),
+        Route("/connection", connection),
     ]
 )

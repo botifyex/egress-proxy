@@ -7,8 +7,8 @@ import httpx
 import pytest
 
 from egress_proxy.protocol import Failure, Header
-from tests.conftest import KEY
-from tests.upstream import COMPRESSED
+from tests.support.servers import KEY
+from tests.support.upstream import COMPRESSED
 
 
 def headers(target: str, key: str = KEY) -> dict[str, str]:
@@ -66,6 +66,13 @@ def test_methods_are_forwarded(egress: str, target: str, method: str) -> None:
     response = send(egress, method, f"{target}/echo")
     assert response.status_code == 200
     assert response.json()["method"] == method
+
+
+@pytest.mark.parametrize("method", ["TRACE", "PROPFIND"])
+def test_unsupported_methods_are_rejected(egress: str, target: str, method: str) -> None:
+    response = send(egress, method, f"{target}/echo")
+    assert response.status_code == 400
+    assert response.headers[Header.FAILURE] == Failure.INVALID
 
 
 def test_head_is_forwarded(egress: str, target: str) -> None:

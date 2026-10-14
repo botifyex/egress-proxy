@@ -114,6 +114,9 @@ values override `.env`:
 egress-proxy --host 0.0.0.0 --port 8000 --workers 4 --log-level warning
 ```
 
+The access log is off by default, since every line would read `GET / 200`; enable it with
+`--access-log`.
+
 **Use HTTPS over the internet.** The key travels in a request header, so encrypt the connection,
 either directly or behind a TLS-terminating reverse proxy, and use `https://` in the client:
 
@@ -126,13 +129,14 @@ egress-proxy --host 0.0.0.0 --port 443 --ssl-keyfile key.pem --ssl-certfile cert
 The client sends each request to the server with the target URL and the key in headers. The
 server checks the key, removes headers that reveal the original client (`X-Forwarded-*`,
 `Forwarded`, `Via`, `X-Real-IP`, `CF-Connecting-IP`, `True-Client-IP` and similar) and hop-by-hop
-headers, forwards the request and streams the response back unchanged. Redirects and cookies are
+headers, forwards the request over a pooled keep-alive connection and streams the response back
+unchanged. Redirects and cookies are
 handled by your client, never stored on the server.
 
 ## Requirements
 
-Python 3.11+ and httpx 0.25.1+. The server also needs Starlette 0.27+ and uvicorn 0.24+, so it
-installs alongside FastAPI 0.100+.
+Python 3.11+. The client needs httpx 0.25.1+; the server runs on uvicorn and aiohttp and handles
+about 13,000 requests per second on a single core.
 
 ## License
 
