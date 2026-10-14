@@ -41,7 +41,7 @@ def spy(monkeypatch: pytest.MonkeyPatch) -> Iterator[Spy]:
 
 @pytest.fixture
 async def started() -> Iterator[Application]:
-    instance = application(Proxy(key=KEY))
+    instance = application(Proxy(key=KEY, allow_local=True))
     await instance.startup()
     yield instance
     await instance.shutdown()
@@ -59,7 +59,7 @@ def counting(created: list[str]) -> None:
 
 @pytest.fixture
 def fresh(fleet: Fleet) -> str:
-    return fleet.start(application(Proxy(key=KEY)))
+    return fleet.start(application(Proxy(key=KEY, allow_local=True)))
 
 
 async def sequential(client: AsyncClient, count: int) -> set[str]:

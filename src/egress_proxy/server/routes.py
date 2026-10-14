@@ -8,6 +8,7 @@ import aiohttp
 import certifi
 from aiohttp_socks import ProxyConnector
 
+from egress_proxy.server.addresses import Guard
 from egress_proxy.server.settings import Proxy
 from egress_proxy.server.upstreams import Upstream, configured
 
@@ -22,8 +23,9 @@ def trusted() -> ssl.SSLContext:
     return ssl.create_default_context(cafile=certifi.where())
 
 
-def direct(context: ssl.SSLContext) -> aiohttp.BaseConnector:
-    return aiohttp.TCPConnector(limit=0, ttl_dns_cache=300, ssl=context)
+def direct(context: ssl.SSLContext, local: bool) -> aiohttp.BaseConnector:
+    resolver = None if local else Guard()
+    return aiohttp.TCPConnector(limit=0, ttl_dns_cache=300, ssl=context, resolver=resolver)
 
 
 def tunnel(upstream: Upstream, context: ssl.SSLContext) -> aiohttp.BaseConnector:
@@ -103,7 +105,7 @@ class Balancer:
 def routes(proxy: Proxy, upstreams: list[Upstream]) -> list[Route]:
     context = trusted()
     if not upstreams:
-        return [Route(DIRECT, client(proxy, direct(context)))]
+        return [Route(DIRECT, client(proxy, direct(context, proxy.allow_local)))]
     return [Route(upstream.name, client(proxy, tunnel(upstream, context))) for upstream in upstreams]
 
 

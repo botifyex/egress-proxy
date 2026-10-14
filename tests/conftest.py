@@ -34,12 +34,12 @@ def target(fleet: Fleet) -> str:
 
 @pytest.fixture(scope="session")
 def egress(fleet: Fleet) -> str:
-    return fleet.start(application(Proxy(key=KEY, timeout=10, connect=10)))
+    return fleet.start(application(Proxy(key=KEY, timeout=10, connect=10, allow_local=True)))
 
 
 @pytest.fixture(scope="session")
 def impatient(fleet: Fleet) -> str:
-    return fleet.start(application(Proxy(key=KEY, timeout=0.1, connect=0.1)))
+    return fleet.start(application(Proxy(key=KEY, timeout=0.1, connect=0.1, allow_local=True)))
 
 
 @pytest.fixture

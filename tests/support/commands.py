@@ -63,7 +63,7 @@ def command(*arguments: str, timeout: float = 20) -> Iterator[str]:
     port = free()
     process = subprocess.Popen(
         [sys.executable, "-c", RUN, "--port", str(port), *arguments],
-        env={**os.environ, "PROXY__KEY": KEY},
+        env={**os.environ, "PROXY__KEY": KEY, "PROXY__ALLOW_LOCAL": "true"},
         start_new_session=True,
     )
     try:

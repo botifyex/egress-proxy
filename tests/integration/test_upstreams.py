@@ -43,8 +43,9 @@ def dead(unreachable: str) -> str:
 
 
 class Egress:
-    def __init__(self, fleet: Fleet, upstreams: list[str], **options: float) -> None:
-        self.application: Application = application(Proxy(key=KEY, upstreams=upstreams, **options))
+    def __init__(self, fleet: Fleet, upstreams: list[str], local: bool = True, **options: float) -> None:
+        proxy = Proxy(key=KEY, upstreams=upstreams, allow_local=local, **options)
+        self.application: Application = application(proxy)
         self.url = fleet.start(self.application)
 
     def get(self, target: str, **options: object) -> httpx.Response:
@@ -195,3 +196,19 @@ def test_command_helper_reports_a_server_that_exits(tmp_path: Path) -> None:
     with pytest.raises(Unstarted, match="exited with code 1"):
         with command("--upstreams-file", str(tmp_path / "missing.txt")):
             pass
+
+
+def test_local_address_is_refused_through_upstream_proxies(local: Fleet, target: str, tunnels: Start) -> None:
+    proxy = tunnels("socks5")
+    response = Egress(local, [proxy.url], local=False).get(f"{target}/echo")
+    assert response.status_code == 400
+    assert "points to a local address" in response.text
+    assert proxy.tunnels == 0
+
+
+def test_host_names_are_resolved_by_the_upstream_proxy(local: Fleet, target: str, tunnels: Start) -> None:
+    proxy = tunnels("socks5")
+    named = target.replace("127.0.0.1", "localhost")
+    response = Egress(local, [proxy.url.replace("socks5://", "socks5h://")], local=False).get(f"{named}/echo")
+    assert response.status_code == 200
+    assert proxy.targets[-1].startswith("localhost:")

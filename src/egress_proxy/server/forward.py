@@ -7,6 +7,7 @@ from aiohttp_socks import ProxyConnectionError, ProxyError, ProxyTimeoutError
 from yarl import URL
 
 from egress_proxy.protocol import Failure, Header
+from egress_proxy.server.addresses import Local, literal, public
 from egress_proxy.server.asgi import Receive, Scope, Send
 from egress_proxy.server.headers import REQUEST, RESPONSE, Pairs, filtered
 from egress_proxy.server.rejection import Rejection
@@ -62,6 +63,7 @@ class Forward:
     def __init__(self, balancer: Balancer, proxy: Proxy) -> None:
         self.balancer = balancer
         self.key = proxy.key.get_secret_value().encode()
+        self.local = proxy.allow_local
 
     def authorize(self, headers: Headers) -> None:
         if not hmac.compare_digest(headers.get(KEY, b""), self.key):
@@ -84,7 +86,18 @@ class Forward:
             raise Rejection(Failure.INVALID, f"'{text}' is not a valid url") from error
         if url.scheme not in SCHEMES or not url.host:
             raise Rejection(Failure.INVALID, f"'{text}' must be an absolute http or https url")
+        self.reachable(url)
         return url
+
+    def reachable(self, url: URL) -> None:
+        address = literal(url.host or "")
+        if not self.local and address is not None and not public(address):
+            raise Rejection(Failure.INVALID, f"{url} points to a local address")
+
+    def unreachable(self, url: URL, error: aiohttp.ClientError) -> Rejection:
+        if isinstance(getattr(error, "os_error", None), Local):
+            return Rejection(Failure.INVALID, f"{url} resolves only to local addresses")
+        return Rejection(Failure.UNREACHABLE, f"{url} is unreachable")
 
     def stream(self, headers: Headers, receive: Receive) -> Stream:
         return Stream(receive, b"content-length" in headers or b"transfer-encoding" in headers)
@@ -102,7 +115,7 @@ class Forward:
         except TimeoutError as error:
             raise Rejection(Failure.TIMEOUT, f"{url} timed out") from error
         except aiohttp.ClientError as error:
-            raise Rejection(Failure.UNREACHABLE, f"{url} is unreachable") from error
+            raise self.unreachable(url, error) from error
 
     def failed(self, route: Route, url: URL, error: Exception) -> Rejection:
         if isinstance(error, UNREACHABLE):

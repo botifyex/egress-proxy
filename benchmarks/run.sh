@@ -52,7 +52,7 @@ uvicorn.main.main(args=sys.argv[1:])'
 taskset -c 2-5 uv run python -c "$serve" benchmarks.upstream:app --port "$upstream" --workers 4 \
   --http httptools --no-access-log --log-level warning &
 pids+=($!)
-PROXY__KEY=benchmark taskset -c 0 uv run egress-proxy --port "$egress" --log-level warning "$@" &
+PROXY__KEY=benchmark PROXY__ALLOW_LOCAL=true taskset -c 0 uv run egress-proxy --port "$egress" --log-level warning "$@" &
 pids+=($!)
 ready "$upstream"
 ready "$egress"

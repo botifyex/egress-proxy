@@ -20,6 +20,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   target.
 - Proxy server built on uvicorn and aiohttp that authenticates clients by key and streams
   request and response bodies over pooled keep-alive connections.
+- Targets on loopback, private, link-local (cloud metadata), shared, reserved and multicast
+  addresses are refused unless `PROXY__ALLOW_LOCAL=true`, including host names that resolve to
+  them and IPv6 forms that embed them; connections use only the checked addresses.
 - Requests lose every header that reveals the client or a proxy: some 80 client address and
   proxy or CDN headers collected from OWASP, request-ip and CDN documentation, matched by name
   and fragment, case-insensitively and with `_` treated as `-`, plus headers named in

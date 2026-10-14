@@ -142,6 +142,7 @@ precedence. Template: [`.env.example`](https://github.com/botifyex/egress-proxy/
 | `PROXY__UPSTREAMS` | `[]` | Upstream proxies inline, as a JSON list |
 | `PROXY__COOLDOWN` | `30` | Seconds an unreachable upstream proxy is left out |
 | `PROXY__ATTEMPTS` | `3` | Upstream proxies tried per request before giving up |
+| `PROXY__ALLOW_LOCAL` | `false` | Allow targets on local and private networks, see below |
 | `SERVER__HOST` | `127.0.0.1` | Address to listen on |
 | `SERVER__PORT` | `8000` | Port to listen on |
 
@@ -164,6 +165,21 @@ either directly or behind a TLS-terminating reverse proxy, and use `https://` in
 ```sh
 egress-proxy --host 0.0.0.0 --port 443 --ssl-keyfile key.pem --ssl-certfile cert.pem
 ```
+
+## Local networks
+
+By default the server refuses targets that are not publicly routable, so a client cannot use it to
+reach services next to it: loopback, private networks (`10.0.0.0/8`, `172.16.0.0/12`,
+`192.168.0.0/16`, `fc00::/7`), link-local addresses including cloud metadata at
+`169.254.169.254`, shared and reserved ranges, multicast, and IPv6 forms that embed such an IPv4
+address. Host names are checked after DNS resolution and the connection uses only the checked
+addresses, so a name that points to a local address, or later starts to, is refused as well.
+Refused requests get a 400 with `x-egress-failure: invalid`.
+
+To proxy into local networks on purpose, set `PROXY__ALLOW_LOCAL=true`.
+
+Through upstream proxies, local IP addresses in the target are still refused, but host names are
+resolved by the proxy and reach whatever its network serves under that name.
 
 ## Upstream proxies
 

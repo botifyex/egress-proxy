@@ -7,8 +7,10 @@ import httpx
 import pytest
 
 from egress_proxy.protocol import Failure, Header
+from egress_proxy.server.application import application
+from egress_proxy.server.settings import Proxy
 from tests.support.identifying import ADDRESSES, LEGITIMATE, MARKERS
-from tests.support.servers import KEY
+from tests.support.servers import KEY, Fleet
 from tests.support.upstream import COMPRESSED
 
 
@@ -240,3 +242,31 @@ def test_headers_named_by_connection_do_not_reach_the_target(egress: str, target
     response = send(egress, "GET", f"{target}/echo", headers=headers)
     assert "x-secret-hop" not in received(response)
     assert received(response)["x-kept"] == ["1"]
+
+
+@pytest.fixture(scope="module")
+def strict(fleet: Fleet) -> str:
+    return fleet.start(application(Proxy(key=KEY)))
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["127.0.0.1", "[::1]", "[::ffff:127.0.0.1]", "[64:ff9b::7f00:1]", "169.254.169.254", "10.0.0.1", "0.0.0.0"],
+)
+def test_local_addresses_are_refused_by_default(strict: str, target: str, host: str) -> None:
+    port = target.rsplit(":", 1)[1]
+    response = send(strict, "GET", f"http://{host}:{port}/echo")
+    assert response.status_code == 400
+    assert response.headers[Header.FAILURE] == Failure.INVALID
+    assert "points to a local address" in response.text
+
+
+def test_names_resolving_to_local_addresses_are_refused_by_default(strict: str, target: str) -> None:
+    response = send(strict, "GET", f"{target.replace('127.0.0.1', 'localhost')}/echo")
+    assert response.status_code == 400
+    assert response.headers[Header.FAILURE] == Failure.INVALID
+    assert "resolves only to local addresses" in response.text
+
+
+def test_local_addresses_are_allowed_when_enabled(egress: str, target: str) -> None:
+    assert send(egress, "GET", f"{target.replace('127.0.0.1', 'localhost')}/echo").status_code == 200

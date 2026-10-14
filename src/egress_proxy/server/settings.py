@@ -23,6 +23,7 @@ class Proxy(BaseSettings):
     upstreams_file: Path | None = None
     cooldown: float = Field(default=30.0, ge=0)
     attempts: int = Field(default=3, ge=1)
+    allow_local: bool = False
 
     model_config = configuration("PROXY__")
 

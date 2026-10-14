@@ -69,7 +69,7 @@ def test_example_is_loadable(isolated: Path) -> None:
     assert Proxy().key.get_secret_value() == "change-me"
     assert (Proxy().timeout, Proxy().connect) == (30, 10)
     assert (Proxy().upstreams, Proxy().upstreams_file) == ([], None)
-    assert (Proxy().cooldown, Proxy().attempts) == (30, 3)
+    assert (Proxy().cooldown, Proxy().attempts, Proxy().allow_local) == (30, 3, False)
 
 
 def test_empty_key_is_rejected() -> None:
