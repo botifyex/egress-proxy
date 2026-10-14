@@ -20,17 +20,19 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          cache-suffix: lint
       - run: uv sync --locked
       - run: uv run ruff check src tests benchmarks
       - run: uv run ruff format --check src tests benchmarks
 
   test:
     name: test (python ${{ matrix.python }}, ${{ matrix.dependencies.name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -45,14 +47,17 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: ${{ matrix.python }}
+          cache-suffix: ${{ matrix.dependencies.name }}
       - run: uv sync ${{ matrix.dependencies.arguments }}
       - run: uv run --no-sync pytest --cov --cov-report=term-missing
 
   package:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          cache-suffix: package
       - run: uv build
       - name: Client extra installs without server dependencies
         run: |
