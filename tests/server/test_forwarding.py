@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from egress_proxy.protocol import Failure, Header
+from tests.support.identifying import ADDRESSES, LEGITIMATE, MARKERS
 from tests.support.servers import KEY
 from tests.support.upstream import COMPRESSED
 
@@ -218,3 +219,24 @@ def test_unreachable_upstream_is_reported(egress: str, unreachable: str) -> None
 def test_server_does_not_add_identifying_headers(egress: str, target: str) -> None:
     response = send(egress, "GET", f"{target}/echo")
     assert "server" not in response.headers
+
+
+@pytest.mark.parametrize("form", ["dash", "underscore"])
+@pytest.mark.parametrize("names", [ADDRESSES, MARKERS], ids=["addresses", "markers"])
+def test_no_identifying_header_reaches_the_target(egress: str, target: str, names: tuple[str, ...], form: str) -> None:
+    sent = {name if form == "dash" else name.replace("-", "_"): "203.0.113.7" for name in names}
+    response = send(egress, "GET", f"{target}/echo", headers=sent)
+    assert set(received(response)) & set(sent) == set()
+
+
+def test_legitimate_headers_reach_the_target(egress: str, target: str) -> None:
+    sent = {name: "value" for name in LEGITIMATE}
+    response = send(egress, "GET", f"{target}/echo", headers=sent)
+    assert set(sent) <= set(received(response))
+
+
+def test_headers_named_by_connection_do_not_reach_the_target(egress: str, target: str) -> None:
+    headers = {"connection": "keep-alive, x-secret-hop", "x-secret-hop": "203.0.113.7", "x-kept": "1"}
+    response = send(egress, "GET", f"{target}/echo", headers=headers)
+    assert "x-secret-hop" not in received(response)
+    assert received(response)["x-kept"] == ["1"]

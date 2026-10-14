@@ -8,53 +8,16 @@ from yarl import URL
 
 from egress_proxy.protocol import Failure, Header
 from egress_proxy.server.asgi import Receive, Scope, Send
+from egress_proxy.server.headers import REQUEST, RESPONSE, Pairs, filtered
 from egress_proxy.server.rejection import Rejection
 from egress_proxy.server.routes import Balancer, Route
 from egress_proxy.server.settings import Proxy
 
-Pairs: TypeAlias = list[tuple[bytes, bytes]]
 Headers: TypeAlias = dict[bytes, bytes]
 
 SCHEMES = frozenset({"http", "https"})
 
 METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
-
-HOP = frozenset(
-    {
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailer",
-        "transfer-encoding",
-        "upgrade",
-    }
-)
-
-IDENTIFYING = frozenset(
-    {
-        "x-forwarded-for",
-        "x-forwarded-host",
-        "x-forwarded-port",
-        "x-forwarded-proto",
-        "x-forwarded-server",
-        "x-real-ip",
-        "x-original-forwarded-for",
-        "forwarded",
-        "via",
-        "cf-connecting-ip",
-        "cf-ipcountry",
-        "true-client-ip",
-        "x-cluster-client-ip",
-    }
-)
-
-PRIVATE = frozenset(header.value for header in Header)
-
-REQUEST_EXCLUDED = HOP | IDENTIFYING | PRIVATE | {"host"}
-
-RESPONSE_EXCLUDED = HOP | PRIVATE
 
 KEY = Header.KEY.encode()
 
@@ -63,10 +26,6 @@ TARGET = Header.TARGET.encode()
 UNREACHABLE = (ProxyConnectionError, ProxyTimeoutError)
 
 REFUSED = (*UNREACHABLE, ProxyError)
-
-
-def filtered(pairs: Pairs, excluded: frozenset[str]) -> Pairs:
-    return [(name, value) for name, value in pairs if name.decode("latin-1").lower() not in excluded]
 
 
 def decoded(pairs: Pairs) -> list[tuple[str, str]]:
@@ -156,7 +115,7 @@ class Forward:
         self.authorize(headers)
         method = self.method(scope)
         url = self.target(headers)
-        forwarded = decoded(filtered(scope["headers"], REQUEST_EXCLUDED))
+        forwarded = decoded(filtered(scope["headers"], REQUEST))
         stream = self.stream(headers, receive)
         failure = Rejection(Failure.UNREACHABLE, f"{url} is unreachable")
         for route in self.balancer.candidates():
@@ -169,7 +128,7 @@ class Forward:
         raise failure
 
     async def relay(self, upstream: aiohttp.ClientResponse, send: Send) -> None:
-        headers = filtered(list(upstream.raw_headers), RESPONSE_EXCLUDED)
+        headers = filtered(list(upstream.raw_headers), RESPONSE)
         await send({"type": "http.response.start", "status": upstream.status, "headers": headers})
         async for chunk in upstream.content.iter_any():
             await send({"type": "http.response.body", "body": chunk, "more_body": True})

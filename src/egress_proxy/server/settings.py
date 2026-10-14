@@ -16,7 +16,7 @@ class Server(BaseSettings):
 
 
 class Proxy(BaseSettings):
-    key: SecretStr
+    key: SecretStr = Field(min_length=1)
     timeout: float = 30.0
     connect: float = 10.0
     upstreams: list[str] = []

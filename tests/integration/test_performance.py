@@ -1,9 +1,5 @@
 import asyncio
-import os
-import signal
-import socket
 import statistics
-import subprocess
 import sys
 import time
 from collections.abc import Iterator, Sequence
@@ -18,7 +14,8 @@ from egress_proxy.client.httpx import AsyncClient
 from egress_proxy.server import main
 from egress_proxy.server.application import Application, application
 from egress_proxy.server.settings import Proxy, Server
-from tests.support.servers import KEY, Fleet, bind
+from tests.support.commands import command
+from tests.support.servers import KEY, Fleet
 
 
 class Spy(MetaPathFinder):
@@ -115,34 +112,10 @@ def test_command_uses_httptools_parser() -> None:
     __import__("httptools")
 
 
-def reachable(port: int) -> bool:
-    try:
-        socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
-    except OSError:
-        return False
-    return True
-
-
 @pytest.fixture
 def workers() -> Iterator[str]:
-    listener = bind()
-    port = listener.getsockname()[1]
-    listener.close()
-    command = [sys.executable, "-c", "from egress_proxy.server.main import run; run()"]
-    options = ["--port", str(port), "--workers", "2", "--loop", "asyncio", "--log-level", "warning"]
-    process = subprocess.Popen(
-        [*command, *options],
-        env={**os.environ, "PROXY__KEY": KEY},
-        start_new_session=True,
-    )
-    deadline = time.monotonic() + 20
-    while not reachable(port):
-        if time.monotonic() > deadline:
-            raise TimeoutError("egress-proxy workers did not start within 20 seconds")
-        time.sleep(0.1)
-    yield f"http://127.0.0.1:{port}"
-    os.killpg(process.pid, signal.SIGTERM)
-    process.wait(timeout=20)
+    with command("--workers", "2", "--loop", "asyncio", "--log-level", "warning") as url:
+        yield url
 
 
 def test_worker_processes_answer_without_delayed_acknowledgement(workers: str, target: str) -> None:

@@ -18,9 +18,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   referring to the target.
 - Proxy failures surface as each library's own errors, with `Refused` for a rejected key or
   target.
-- Proxy server built on uvicorn and aiohttp that authenticates clients by key, streams
-  request and response bodies over pooled keep-alive connections, and strips identifying,
-  hop-by-hop and protocol headers.
+- Proxy server built on uvicorn and aiohttp that authenticates clients by key and streams
+  request and response bodies over pooled keep-alive connections.
+- Requests lose every header that reveals the client or a proxy: some 80 client address and
+  proxy or CDN headers collected from OWASP, request-ip and CDN documentation, matched by name
+  and fragment, case-insensitively and with `_` treated as `-`, plus headers named in
+  `Connection` and the httpoxy `Proxy` header.
 - Server configuration from `.env` and the `egress-proxy` command, which accepts every
   uvicorn option.
 - Upstream proxies: the server can spread requests across HTTP, HTTPS, SOCKS4 and SOCKS5

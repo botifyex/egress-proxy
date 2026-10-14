@@ -70,3 +70,8 @@ def test_example_is_loadable(isolated: Path) -> None:
     assert (Proxy().timeout, Proxy().connect) == (30, 10)
     assert (Proxy().upstreams, Proxy().upstreams_file) == ([], None)
     assert (Proxy().cooldown, Proxy().attempts) == (30, 3)
+
+
+def test_empty_key_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        Proxy(key="")

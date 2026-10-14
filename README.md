@@ -206,11 +206,25 @@ file and line.
 ## How it works
 
 The client sends each request to the server with the target URL and the key in headers. The
-server checks the key, removes headers that reveal the original client (`X-Forwarded-*`,
-`Forwarded`, `Via`, `X-Real-IP`, `CF-Connecting-IP`, `True-Client-IP` and similar) and hop-by-hop
-headers, forwards the request over a pooled keep-alive connection and streams the response back
-unchanged. Redirects and cookies are
-handled by your client, never stored on the server.
+server checks the key, forwards the request over a pooled keep-alive connection and streams the
+response back unchanged. Redirects and cookies are handled by your client, never stored on the
+server.
+
+Before forwarding, the server removes every header that could reveal the client or the proxy,
+including those a load balancer or CDN in front of it adds:
+
+- client addresses: `X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `X-Client-IP`, `Client-IP`,
+  `True-Client-IP`, `X-Originating-IP`, `X-Remote-Addr`, `CF-Connecting-IP`, `Fastly-Client-IP`,
+  `CloudFront-Viewer-Address`, `X-Azure-ClientIP` and any other name containing `forwarded`,
+  `client-ip`, `real-ip`, `remote-addr` or a similar fragment;
+- proxy and CDN markers: `Via`, `CF-Ray`, `CDN-Loop`, `X-Amzn-Trace-Id`, `X-Envoy-*`,
+  `CloudFront-Viewer-*` and similar;
+- hop-by-hop headers, including every header named in `Connection` (RFC 9110), and `Proxy`
+  (httpoxy).
+
+Names are compared case-insensitively with `_` treated as `-`, since many servers map both to the
+same variable. Credentials such as `Authorization`, `Cookie`, `CF-Access-Client-Id` or
+`Fastly-Key` pass through untouched.
 
 ## Requirements
 

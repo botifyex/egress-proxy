@@ -1,11 +1,5 @@
-import os
-import signal
-import subprocess
-import sys
-import time
 from collections import Counter
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import TypeAlias
 
@@ -15,9 +9,10 @@ import pytest
 from egress_proxy.protocol import Failure, Header
 from egress_proxy.server.application import Application, application
 from egress_proxy.server.settings import Proxy
+from tests.support.commands import Unstarted, command
 from tests.support.proxies import Kind, Running, serve
 from tests.support.proxies import Proxy as Tunnel
-from tests.support.servers import KEY, Fleet, bind
+from tests.support.servers import KEY, Fleet
 
 Start: TypeAlias = Callable[..., Tunnel]
 
@@ -33,36 +28,6 @@ def tunnels() -> Iterator[Start]:
     yield start
     for item in running:
         item.stop()
-
-
-def reachable(port: int) -> bool:
-    try:
-        httpx.get(f"http://127.0.0.1:{port}/", timeout=0.2)
-    except httpx.TransportError:
-        return False
-    return True
-
-
-@contextmanager
-def command(*arguments: str) -> Iterator[str]:
-    listener = bind()
-    port = listener.getsockname()[1]
-    listener.close()
-    process = subprocess.Popen(
-        [sys.executable, "-c", "from egress_proxy.server.main import run; run()", "--port", str(port), *arguments],
-        env={**os.environ, "PROXY__KEY": KEY},
-        start_new_session=True,
-    )
-    deadline = time.monotonic() + 20
-    while not reachable(port):
-        if time.monotonic() > deadline or process.poll() is not None:
-            raise TimeoutError("egress-proxy did not start")
-        time.sleep(0.1)
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        os.killpg(process.pid, signal.SIGTERM)
-        process.wait(timeout=20)
 
 
 @pytest.fixture(scope="module")
@@ -216,3 +181,17 @@ def test_command_option_routes_workers_through_the_file(target: str, tunnels: St
         responses = [httpx.get(egress, headers={Header.KEY: KEY, Header.TARGET: f"{target}/echo"}) for _ in range(6)]
     assert [response.status_code for response in responses] == [200] * 6
     assert proxy.tunnels >= 1
+
+
+def test_command_helper_stops_a_server_that_never_listens(tmp_path: Path) -> None:
+    socket_path = tmp_path / "egress.sock"
+    with pytest.raises(Unstarted, match="did not listen"):
+        with command("--uds", str(socket_path), timeout=2):
+            pass
+    assert not socket_path.exists()
+
+
+def test_command_helper_reports_a_server_that_exits(tmp_path: Path) -> None:
+    with pytest.raises(Unstarted, match="exited with code 1"):
+        with command("--upstreams-file", str(tmp_path / "missing.txt")):
+            pass

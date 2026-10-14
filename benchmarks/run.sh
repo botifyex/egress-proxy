@@ -14,6 +14,17 @@ stop() {
 }
 trap stop EXIT
 
+busy() {
+  ss -ltnH "sport = :$1" | grep -q .
+}
+
+for port in "$upstream" "$egress"; do
+  if busy "$port"; then
+    echo "port $port is already in use; stop whatever listens there before benchmarking" >&2
+    exit 1
+  fi
+done
+
 ready() {
   for _ in $(seq 1 50); do
     curl -s -o /dev/null "http://127.0.0.1:$1/" && return 0

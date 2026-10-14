@@ -6,8 +6,10 @@ from collections.abc import Callable
 from typing import TypeAlias
 
 import uvicorn
+from pydantic import ValidationError
 
-from egress_proxy.server.settings import Server
+from egress_proxy.server.settings import Proxy, Server
+from egress_proxy.server.upstreams import Malformed, configured
 
 FACTORY = "egress_proxy.server.application:create"
 
@@ -16,6 +18,8 @@ NETWORK = frozenset({socket.AF_INET, socket.AF_INET6})
 Binder: TypeAlias = Callable[[uvicorn.Config], socket.socket]
 
 UPSTREAMS = "PROXY__UPSTREAMS_FILE"
+
+INFORMATIONAL = frozenset({"--help", "--version"})
 
 EPILOG = """\b
 egress-proxy options:
@@ -49,6 +53,15 @@ def separated(arguments: list[str]) -> list[str]:
     return rest
 
 
+def validate(arguments: list[str]) -> None:
+    if INFORMATIONAL & set(arguments):
+        return
+    try:
+        configured(Proxy())
+    except (ValidationError, Malformed) as error:
+        raise SystemExit(f"egress-proxy: {error}") from error
+
+
 def defaults(server: Server) -> list[str]:
     return [
         FACTORY,
@@ -67,6 +80,7 @@ def defaults(server: Server) -> list[str]:
 
 def run() -> None:
     rest = separated(sys.argv[1:])
+    validate(rest)
     uvicorn.Config.bind_socket = immediate(uvicorn.Config.bind_socket)
     uvicorn.main.epilog = EPILOG
     uvicorn.main.main(args=[*defaults(Server()), *rest], prog_name="egress-proxy")

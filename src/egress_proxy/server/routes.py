@@ -77,12 +77,19 @@ class Balancer:
         self.position += 1
         return [*self.routes[start:], *self.routes[:start]]
 
-    def candidates(self) -> list[Route]:
-        now = self.clock()
-        ordered = self.rotated()
+    def ranked(self, ordered: list[Route], now: float) -> list[Route]:
         ready = [route for route in ordered if route.resting <= now]
         resting = sorted((route for route in ordered if route.resting > now), key=lambda route: route.resting)
-        return [*ready, *resting][: self.attempts]
+        return [*ready, *resting]
+
+    def candidates(self) -> list[Route]:
+        if len(self.routes) == 1:
+            return self.routes
+        ordered = self.rotated()
+        now = self.clock()
+        if all(route.resting <= now for route in ordered):
+            return ordered[: self.attempts]
+        return self.ranked(ordered, now)[: self.attempts]
 
     def rest(self, route: Route) -> None:
         route.resting = self.clock() + self.cooldown
