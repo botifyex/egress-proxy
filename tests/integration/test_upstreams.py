@@ -1,3 +1,4 @@
+import socket
 from collections import Counter
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -189,7 +190,8 @@ def test_command_helper_stops_a_server_that_never_listens(tmp_path: Path) -> Non
     with pytest.raises(Unstarted, match="did not listen"):
         with command("--uds", str(socket_path), timeout=2):
             pass
-    assert not socket_path.exists()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe, pytest.raises(OSError):
+        probe.connect(str(socket_path))
 
 
 def test_command_helper_reports_a_server_that_exits(tmp_path: Path) -> None:
