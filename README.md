@@ -78,10 +78,14 @@ uv run egress-proxy
 
 ## Publishing
 
-```sh
-uv build
-uv publish --token <pypi-token>
-```
+Every push and pull request runs CI: ruff, the test suite on Python 3.11–3.14 against both the
+lowest and the latest allowed dependencies, and a wheel smoke test.
+
+Publishing a GitHub release tagged `v<version>` (matching `version` in `pyproject.toml`) runs CI
+again and uploads the package to PyPI through Trusted Publishing, so no token is stored.
+
+One-time setup on PyPI → *Publishing* → *Add a new pending publisher*:
+owner `botifyex`, repository `egress-proxy`, workflow `publish.yml`, environment `pypi`.
 
 ## License
 

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths-ignore: &ignored
+      - "**.md"
+      - LICENSE
+      - .gitignore
+  pull_request:
+    paths-ignore: *ignored
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+
+  test:
+    name: test (python ${{ matrix.python }}, ${{ matrix.dependencies.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+        dependencies:
+          - name: lowest
+            arguments: --resolution lowest-direct
+          - name: latest
+            arguments: --upgrade
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync ${{ matrix.dependencies.arguments }}
+      - run: uv run --no-sync pytest --cov --cov-report=term-missing
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - run: uv build
+      - name: Client extra installs without server dependencies
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv run --isolated --no-project --with "egress-proxy[client] @ ./$wheel" \
+            python -c "import egress_proxy.client; import importlib.util as u; assert u.find_spec('starlette') is None"
+      - name: Server extra provides the command
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv run --isolated --no-project --with "egress-proxy[server] @ ./$wheel" egress-proxy --help
