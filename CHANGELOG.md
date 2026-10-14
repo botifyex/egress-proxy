@@ -7,6 +7,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Running `egress-proxy` without the `server` extra prints one line naming the extra to install
+  instead of a traceback.
+- Releases are uploaded with the PyPA publish action, which adds PEP 740 attestations linking
+  each file on PyPI to the GitHub workflow run that built it.
+
 ## [0.1.0] - 2026-10-14
 
 ### Added

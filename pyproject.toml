@@ -57,7 +57,7 @@ all = [
 ]
 
 [project.scripts]
-egress-proxy = "egress_proxy.server.main:run"
+egress-proxy = "egress_proxy.command:run"
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]

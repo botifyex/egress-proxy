@@ -80,3 +80,7 @@ jobs:
             exit 1
           fi
           grep -F "pip install 'egress-proxy[server]'" <<<"$output"
+          if grep -q Traceback <<<"$output"; then
+            echo "::error::egress-proxy printed a traceback instead of a message"
+            exit 1
+          fi
