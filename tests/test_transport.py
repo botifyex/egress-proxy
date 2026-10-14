@@ -29,11 +29,15 @@ def failing(failure: Failure) -> Recorder:
 
 
 def synchronous(recorder: Recorder) -> httpx.Client:
-    return httpx.Client(transport=Transport(EGRESS, "key", httpx.MockTransport(recorder)))
+    return httpx.Client(
+        transport=Transport(egress_url=EGRESS, egress_key="key", egress_transport=httpx.MockTransport(recorder))
+    )
 
 
 def asynchronous(recorder: Recorder) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=AsyncTransport(EGRESS, "key", httpx.MockTransport(recorder)))
+    return httpx.AsyncClient(
+        transport=AsyncTransport(egress_url=EGRESS, egress_key="key", egress_transport=httpx.MockTransport(recorder))
+    )
 
 
 def test_request_is_sent_to_egress() -> None:
@@ -83,7 +87,7 @@ def test_timeout_extension_is_preserved() -> None:
 
 def test_base_url_is_resolved_before_rewrite() -> None:
     recorder = Recorder()
-    transport = Transport(EGRESS, "key", httpx.MockTransport(recorder))
+    transport = Transport(egress_url=EGRESS, egress_key="key", egress_transport=httpx.MockTransport(recorder))
     with httpx.Client(base_url="https://api.example.com/v1", transport=transport) as client:
         client.get("/items")
     assert recorder.last.headers[Header.TARGET] == "https://api.example.com/v1/items"
@@ -141,14 +145,21 @@ async def test_asynchronous_transport_rewrites_request() -> None:
 
 def test_client_uses_given_inner_transport() -> None:
     recorder = Recorder()
-    with Client(EGRESS, "key", transport=httpx.MockTransport(recorder), base_url="https://api.example.com") as client:
+    with Client(
+        egress_url=EGRESS,
+        egress_key="key",
+        egress_transport=httpx.MockTransport(recorder),
+        base_url="https://api.example.com",
+    ) as client:
         client.get("/items")
     assert recorder.last.headers[Header.TARGET] == "https://api.example.com/items"
 
 
 async def test_asynchronous_client_uses_given_inner_transport() -> None:
     recorder = Recorder()
-    async with AsyncClient(EGRESS, "key", transport=httpx.MockTransport(recorder)) as client:
+    async with AsyncClient(
+        egress_url=EGRESS, egress_key="key", egress_transport=httpx.MockTransport(recorder)
+    ) as client:
         await client.get("https://api.example.com/items")
     assert recorder.last.headers[Header.KEY] == "key"
 
@@ -158,7 +169,12 @@ def test_client_can_be_subclassed() -> None:
 
     class Example(Client):
         def __init__(self) -> None:
-            super().__init__(EGRESS, "key", transport=httpx.MockTransport(recorder), base_url="https://example.com")
+            super().__init__(
+                egress_url=EGRESS,
+                egress_key="key",
+                egress_transport=httpx.MockTransport(recorder),
+                base_url="https://example.com",
+            )
 
         def items(self) -> httpx.Response:
             return self.get("/items")
@@ -172,7 +188,7 @@ def test_environment_proxies_are_ignored(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("HTTPS_PROXY", "http://other-proxy:3128")
     monkeypatch.setenv("HTTP_PROXY", "http://other-proxy:3128")
     recorder = Recorder()
-    with Client(EGRESS, "key", transport=httpx.MockTransport(recorder)) as client:
+    with Client(egress_url=EGRESS, egress_key="key", egress_transport=httpx.MockTransport(recorder)) as client:
         client.get("https://api.example.com/")
     assert recorder.last.url == httpx.URL(EGRESS)
 
@@ -187,7 +203,7 @@ def test_closing_client_closes_inner_transport() -> None:
         def close(self) -> None:
             closed.append(True)
 
-    client = Client(EGRESS, "key", transport=Inner())
+    client = Client(egress_url=EGRESS, egress_key="key", egress_transport=Inner())
     client.close()
     assert closed == [True]
 
@@ -202,6 +218,12 @@ async def test_closing_asynchronous_client_closes_inner_transport() -> None:
         async def aclose(self) -> None:
             closed.append(True)
 
-    client = AsyncClient(EGRESS, "key", transport=Inner())
+    client = AsyncClient(egress_url=EGRESS, egress_key="key", egress_transport=Inner())
     await client.aclose()
     assert closed == [True]
+
+
+@pytest.mark.parametrize("factory", [Client, AsyncClient, Transport, AsyncTransport])
+def test_egress_parameters_are_keyword_only(factory: type) -> None:
+    with pytest.raises(TypeError):
+        factory(EGRESS, "key")

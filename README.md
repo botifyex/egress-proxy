@@ -28,7 +28,7 @@ from egress_proxy.client import AsyncClient
 
 
 async def main() -> None:
-    async with AsyncClient("http://SERVER_IP:8000", "PROXY_KEY") as client:
+    async with AsyncClient(egress_url="http://SERVER_IP:8000", egress_key="PROXY_KEY") as client:
         response = await client.get("https://api.ipify.org?format=json")
         print(response.json())
 
@@ -36,8 +36,8 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-It prints the server's IP. `AsyncClient` is a regular `httpx.AsyncClient`, so the rest of your code
-stays the same.
+It prints the server's IP. `AsyncClient` is a regular `httpx.AsyncClient`: the `egress_*`
+parameters configure the proxy, everything else is passed to httpx unchanged.
 
 ## Add to an existing project
 
@@ -47,7 +47,12 @@ stays the same.
 ```python
 from egress_proxy.client import AsyncClient, Client
 
-client = AsyncClient("http://SERVER_IP:8000", "PROXY_KEY", base_url="https://api.example.com", timeout=10)
+client = AsyncClient(
+    egress_url="http://SERVER_IP:8000",
+    egress_key="PROXY_KEY",
+    base_url="https://api.example.com",
+    timeout=10,
+)
 ```
 
 **Keep your own httpx client** and only swap its transport (`Transport` for `httpx.Client`):
@@ -56,7 +61,9 @@ client = AsyncClient("http://SERVER_IP:8000", "PROXY_KEY", base_url="https://api
 import httpx
 from egress_proxy.client import AsyncTransport
 
-client = httpx.AsyncClient(transport=AsyncTransport("http://SERVER_IP:8000", "PROXY_KEY"))
+client = httpx.AsyncClient(
+    transport=AsyncTransport(egress_url="http://SERVER_IP:8000", egress_key="PROXY_KEY"),
+)
 ```
 
 **Subclass it** like any httpx client:
@@ -64,8 +71,15 @@ client = httpx.AsyncClient(transport=AsyncTransport("http://SERVER_IP:8000", "PR
 ```python
 class Api(AsyncClient):
     def __init__(self) -> None:
-        super().__init__("http://SERVER_IP:8000", "PROXY_KEY", base_url="https://api.example.com")
+        super().__init__(
+            egress_url="http://SERVER_IP:8000",
+            egress_key="PROXY_KEY",
+            base_url="https://api.example.com",
+        )
 ```
+
+To tune the connection to the proxy server, pass `egress_transport`, for example
+`egress_transport=httpx.AsyncHTTPTransport(http2=True, retries=2)`.
 
 Errors are standard httpx exceptions, so existing `except` blocks keep working:
 
