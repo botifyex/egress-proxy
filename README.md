@@ -1,99 +1,127 @@
 # egress-proxy
 
-Authenticated egress proxy server with a drop-in httpx client.
+Send the HTTP requests of any httpx-based Python project through your own server: they leave from
+the server's IP, with identifying headers removed.
+
+## Quick start
+
+**1. Start the server** on the machine whose IP the requests should come from:
 
 ```sh
-pip install "egress-proxy[client]"   # httpx integration
-pip install "egress-proxy[server]"   # proxy server
+pip install "egress-proxy[server]"
+python -c "import secrets; print('PROXY__KEY=' + secrets.token_urlsafe(32))" > .env
+egress-proxy --host 0.0.0.0 --port 8000
 ```
 
-Supports Python 3.11+, httpx 0.25.1+, Starlette 0.27+ (works alongside FastAPI 0.100+).
+The generated key is in `.env`; the client needs it.
 
-## Server
-
-Copy [`.env.example`](https://github.com/botifyex/egress-proxy/blob/master/.env.example) to `.env` and set `PROXY__KEY`, for example to the output of
-`python -c "import secrets; print(secrets.token_urlsafe(32))"`. Environment variables override `.env`.
+**2. Use it in your project:**
 
 ```sh
-cp .env.example .env
+pip install "egress-proxy[client]"
 ```
-
-`egress-proxy` accepts every uvicorn option; `SERVER__HOST` and `SERVER__PORT` are only defaults:
-
-```sh
-egress-proxy
-egress-proxy --host 0.0.0.0 --port 9000 --workers 4 --log-level warning
-```
-
-Or run the application factory with uvicorn directly:
-
-```sh
-uvicorn egress_proxy.server.application:create --factory --host 0.0.0.0 --port 9000
-```
-
-## Client
-
-Drop-in replacement for `httpx.AsyncClient` / `httpx.Client`:
 
 ```python
+import asyncio
+
 from egress_proxy.client import AsyncClient
 
-async with AsyncClient("http://proxy:8000", "change-me", base_url="https://api.example.com") as client:
-    response = await client.get("/items", params={"page": 1})
+
+async def main() -> None:
+    async with AsyncClient("http://SERVER_IP:8000", "PROXY_KEY") as client:
+        response = await client.get("https://api.ipify.org?format=json")
+        print(response.json())
+
+
+asyncio.run(main())
 ```
 
-Subclass it like any httpx client:
+It prints the server's IP. `AsyncClient` is a regular `httpx.AsyncClient`, so the rest of your code
+stays the same.
+
+## Add to an existing project
+
+**Replace the client class.** `Client` and `AsyncClient` accept every `httpx.Client` /
+`httpx.AsyncClient` option:
 
 ```python
-class Example(AsyncClient):
-    def __init__(self) -> None:
-        super().__init__("http://proxy:8000", "change-me", base_url="https://api.example.com")
+from egress_proxy.client import AsyncClient, Client
+
+client = AsyncClient("http://SERVER_IP:8000", "PROXY_KEY", base_url="https://api.example.com", timeout=10)
 ```
 
-Or plug the transport into an existing httpx client:
+**Keep your own httpx client** and only swap its transport (`Transport` for `httpx.Client`):
 
 ```python
 import httpx
 from egress_proxy.client import AsyncTransport
 
-client = httpx.AsyncClient(transport=AsyncTransport("http://proxy:8000", "change-me"))
+client = httpx.AsyncClient(transport=AsyncTransport("http://SERVER_IP:8000", "PROXY_KEY"))
 ```
 
-Pass `transport=` (or `inner=` for `AsyncTransport`) to customise the connection to the proxy,
-for example `httpx.AsyncHTTPTransport(http2=True, retries=2)`.
+**Subclass it** like any httpx client:
 
-Proxy failures surface as regular httpx errors: `httpx.TimeoutException`, `httpx.ConnectError`,
-and `egress_proxy.client.Refused` (a `httpx.TransportError`) for a wrong key or target.
+```python
+class Api(AsyncClient):
+    def __init__(self) -> None:
+        super().__init__("http://SERVER_IP:8000", "PROXY_KEY", base_url="https://api.example.com")
+```
 
-## Development
+Errors are standard httpx exceptions, so existing `except` blocks keep working:
+
+| Situation | Raised |
+|---|---|
+| Wrong key or invalid target URL | `egress_proxy.client.Refused` (a `httpx.TransportError`) |
+| Target did not answer in time | `httpx.TimeoutException` |
+| Target or proxy server unreachable | `httpx.ConnectError` |
+
+Responses with error statuses (404, 500, …) come back as normal responses, exactly as without the proxy.
+
+## Server configuration
+
+Settings are read from `.env` in the working directory or from environment variables, which take
+precedence. Template: [`.env.example`](https://github.com/botifyex/egress-proxy/blob/master/.env.example).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PROXY__KEY` | required | Key every client must send |
+| `PROXY__TIMEOUT` | `30` | Seconds to wait for the target |
+| `PROXY__CONNECT` | `10` | Seconds to connect to the target |
+| `SERVER__HOST` | `127.0.0.1` | Address to listen on |
+| `SERVER__PORT` | `8000` | Port to listen on |
+
+The client's own timeout still applies (httpx defaults to 5 seconds), so raise it as well for slow
+targets: `AsyncClient(..., timeout=60)`.
+
+`egress-proxy` accepts every [uvicorn option](https://uvicorn.dev/settings/), and command-line
+values override `.env`:
 
 ```sh
-uv sync
-uv run pytest --cov
-uv run pytest -n auto            # parallel, pays off once the suite grows beyond a few seconds
-uv run ruff check src tests
-uv run egress-proxy
+egress-proxy --host 0.0.0.0 --port 8000 --workers 4 --log-level warning
 ```
 
-## Publishing
+**Use HTTPS over the internet.** The key travels in a request header, so encrypt the connection,
+either directly or behind a TLS-terminating reverse proxy, and use `https://` in the client:
 
-Every push and pull request runs CI: ruff, the test suite on Python 3.11–3.14 against both the
-lowest and the latest allowed dependencies, and a wheel smoke test.
+```sh
+egress-proxy --host 0.0.0.0 --port 443 --ssl-keyfile key.pem --ssl-certfile cert.pem
+```
 
-Releases follow [Semantic Versioning](https://semver.org/) and are recorded in
-[CHANGELOG.md](https://github.com/botifyex/egress-proxy/blob/master/CHANGELOG.md):
+## How it works
 
-1. Add entries under `## [Unreleased]` in `CHANGELOG.md` together with the changes.
-2. Bump the version with a clean working tree: `bump-my-version bump patch|minor|major`.
-   It updates `pyproject.toml`, `uv.lock` and `CHANGELOG.md`, commits and creates the `v<version>` tag.
-3. Push with `git push --follow-tags`, then publish a GitHub release from that tag.
+The client sends each request to the server with the target URL and the key in headers. The
+server checks the key, removes headers that reveal the original client (`X-Forwarded-*`,
+`Forwarded`, `Via`, `X-Real-IP`, `CF-Connecting-IP`, `True-Client-IP` and similar) and hop-by-hop
+headers, forwards the request and streams the response back unchanged. Redirects and cookies are
+handled by your client, never stored on the server.
 
-Publishing the release runs CI again and uploads the package to PyPI through Trusted Publishing,
-so no token is stored. The installed version is available as `egress_proxy.__version__`.
+## Requirements
 
-One-time setup on PyPI → *Publishing* → *Add a new pending publisher*:
-owner `botifyex`, repository `egress-proxy`, workflow `publish.yml`, environment `pypi`.
+Python 3.11+ and httpx 0.25.1+. The server also needs Starlette 0.27+ and uvicorn 0.24+, so it
+installs alongside FastAPI 0.100+.
 
 ## License
 
-[MIT-0](https://github.com/botifyex/egress-proxy/blob/master/LICENSE) — use it for anything, no attribution required.
+[MIT-0](https://github.com/botifyex/egress-proxy/blob/master/LICENSE): use it for anything, no
+attribution required. Contributing and releases:
+[CONTRIBUTING.md](https://github.com/botifyex/egress-proxy/blob/master/CONTRIBUTING.md).
