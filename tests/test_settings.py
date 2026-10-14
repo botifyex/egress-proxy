@@ -5,12 +5,23 @@ from pydantic import ValidationError
 
 from egress_proxy.server.settings import Proxy, Server
 
-VARIABLES = ["SERVER__HOST", "SERVER__PORT", "PROXY__KEY", "PROXY__TIMEOUT", "PROXY__CONNECT"]
+EXAMPLE = Path(__file__).parent.parent / ".env.example"
+
+
+def names(path: Path) -> set[str]:
+    lines = (line.strip() for line in path.read_text().splitlines())
+    return {line.split("=", 1)[0] for line in lines if line and not line.startswith("#")}
+
+
+def fields() -> set[str]:
+    server = {f"SERVER__{name.upper()}" for name in Server.model_fields}
+    proxy = {f"PROXY__{name.upper()}" for name in Proxy.model_fields}
+    return server | proxy
 
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    for variable in VARIABLES:
+    for variable in fields():
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -46,3 +57,14 @@ def test_unrelated_variables_are_ignored(isolated: Path) -> None:
 
 def test_key_is_hidden_in_representation() -> None:
     assert "hidden" not in repr(Proxy(key="hidden"))
+
+
+def test_example_lists_every_setting() -> None:
+    assert names(EXAMPLE) == fields()
+
+
+def test_example_is_loadable(isolated: Path) -> None:
+    (isolated / ".env").write_text(EXAMPLE.read_text())
+    assert (Server().host, Server().port) == (Server.model_fields["host"].default, Server.model_fields["port"].default)
+    assert Proxy().key.get_secret_value() == "change-me"
+    assert (Proxy().timeout, Proxy().connect) == (30, 10)

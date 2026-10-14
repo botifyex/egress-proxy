@@ -179,6 +179,12 @@ version = "0.1.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
+all = [
+    { name = "httpx", extra = ["http2"] },
+    { name = "pydantic-settings" },
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
 client = [
     { name = "httpx" },
 ]
@@ -191,7 +197,7 @@ server = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "egress-proxy", extra = ["client", "server"] },
+    { name = "egress-proxy", extra = ["all"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -201,17 +207,18 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "egress-proxy", extras = ["client", "server"], marker = "extra == 'all'" },
     { name = "httpx", marker = "extra == 'client'", specifier = ">=0.25.1,<1" },
     { name = "httpx", extras = ["http2"], marker = "extra == 'server'", specifier = ">=0.25.1,<1" },
     { name = "pydantic-settings", marker = "extra == 'server'", specifier = ">=2.0.0" },
     { name = "starlette", marker = "extra == 'server'", specifier = ">=0.27.0" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.24.0" },
 ]
-provides-extras = ["client", "server"]
+provides-extras = ["client", "server", "all"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "egress-proxy", extras = ["client", "server"] },
+    { name = "egress-proxy", extras = ["all"] },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },

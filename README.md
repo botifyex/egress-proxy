@@ -11,12 +11,11 @@ Supports Python 3.11+, httpx 0.25.1+, Starlette 0.27+ (works alongside FastAPI 0
 
 ## Server
 
-```env
-SERVER__HOST=0.0.0.0
-SERVER__PORT=8000
-PROXY__KEY=change-me
-PROXY__TIMEOUT=30
-PROXY__CONNECT=10
+Copy [`.env.example`](https://github.com/botifyex/egress-proxy/blob/master/.env.example) to `.env` and set `PROXY__KEY`, for example to the output of
+`python -c "import secrets; print(secrets.token_urlsafe(32))"`. Environment variables override `.env`.
+
+```sh
+cp .env.example .env
 ```
 
 `egress-proxy` accepts every uvicorn option; `SERVER__HOST` and `SERVER__PORT` are only defaults:
@@ -81,12 +80,20 @@ uv run egress-proxy
 Every push and pull request runs CI: ruff, the test suite on Python 3.11–3.14 against both the
 lowest and the latest allowed dependencies, and a wheel smoke test.
 
-Publishing a GitHub release tagged `v<version>` (matching `version` in `pyproject.toml`) runs CI
-again and uploads the package to PyPI through Trusted Publishing, so no token is stored.
+Releases follow [Semantic Versioning](https://semver.org/) and are recorded in
+[CHANGELOG.md](https://github.com/botifyex/egress-proxy/blob/master/CHANGELOG.md):
+
+1. Add entries under `## [Unreleased]` in `CHANGELOG.md` together with the changes.
+2. Bump the version with a clean working tree: `bump-my-version bump patch|minor|major`.
+   It updates `pyproject.toml`, `uv.lock` and `CHANGELOG.md`, commits and creates the `v<version>` tag.
+3. Push with `git push --follow-tags`, then publish a GitHub release from that tag.
+
+Publishing the release runs CI again and uploads the package to PyPI through Trusted Publishing,
+so no token is stored. The installed version is available as `egress_proxy.__version__`.
 
 One-time setup on PyPI → *Publishing* → *Add a new pending publisher*:
 owner `botifyex`, repository `egress-proxy`, workflow `publish.yml`, environment `pypi`.
 
 ## License
 
-[MIT-0](LICENSE) — use it for anything, no attribution required.
+[MIT-0](https://github.com/botifyex/egress-proxy/blob/master/LICENSE) — use it for anything, no attribution required.
