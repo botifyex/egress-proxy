@@ -2,7 +2,7 @@ from typing import Any
 
 import httpx
 
-from egress_proxy.client.transport import AsyncTransport, Transport
+from egress_proxy.client.httpx.transport import AsyncTransport, Transport
 
 
 class Client(httpx.Client):

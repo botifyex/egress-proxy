@@ -15,16 +15,18 @@ egress-proxy --host 0.0.0.0 --port 8000
 
 The generated key is in `.env`; the client needs it.
 
-**2. Use it in your project:**
+**2. Use it in your project** with the HTTP client you already have:
 
 ```sh
-pip install "egress-proxy[client]"
+pip install "egress-proxy[client-httpx]"     # httpx
+pip install "egress-proxy[client-aiohttp]"   # aiohttp
+pip install "egress-proxy[client]"           # both
 ```
 
 ```python
 import asyncio
 
-from egress_proxy.client import AsyncClient
+from egress_proxy.client.httpx import AsyncClient
 
 
 async def main() -> None:
@@ -36,16 +38,16 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-It prints the server's IP. `AsyncClient` is a regular `httpx.AsyncClient`: the `egress_*`
-parameters configure the proxy, everything else is passed to httpx unchanged.
+It prints the server's IP. The `egress_*` parameters configure the proxy; everything else goes to
+the HTTP client unchanged.
 
-## Add to an existing project
+## httpx
 
-**Replace the client class.** `Client` and `AsyncClient` accept every `httpx.Client` /
-`httpx.AsyncClient` option:
+**Replace the client class.** `Client` and `AsyncClient` are `httpx.Client` / `httpx.AsyncClient`
+subclasses and accept all of their options:
 
 ```python
-from egress_proxy.client import AsyncClient, Client
+from egress_proxy.client.httpx import AsyncClient, Client
 
 client = AsyncClient(
     egress_url="http://SERVER_IP:8000",
@@ -55,11 +57,11 @@ client = AsyncClient(
 )
 ```
 
-**Keep your own httpx client** and only swap its transport (`Transport` for `httpx.Client`):
+**Keep your own client** and only swap its transport (`Transport` for `httpx.Client`):
 
 ```python
 import httpx
-from egress_proxy.client import AsyncTransport
+from egress_proxy.client.httpx import AsyncTransport
 
 client = httpx.AsyncClient(
     transport=AsyncTransport(egress_url="http://SERVER_IP:8000", egress_key="PROXY_KEY"),
@@ -81,15 +83,50 @@ class Api(AsyncClient):
 To tune the connection to the proxy server, pass `egress_transport`, for example
 `egress_transport=httpx.AsyncHTTPTransport(http2=True, retries=2)`.
 
-Errors are standard httpx exceptions, so existing `except` blocks keep working:
-
 | Situation | Raised |
 |---|---|
-| Wrong key or invalid target URL | `egress_proxy.client.Refused` (a `httpx.TransportError`) |
+| Wrong key or invalid target URL | `egress_proxy.client.httpx.Refused` (a `httpx.TransportError`) |
 | Target did not answer in time | `httpx.TimeoutException` |
 | Target or proxy server unreachable | `httpx.ConnectError` |
 
-Responses with error statuses (404, 500, …) come back as normal responses, exactly as without the proxy.
+## aiohttp
+
+**Create a session.** `session` returns a regular `aiohttp.ClientSession` and accepts all of its
+options:
+
+```python
+from egress_proxy.client.aiohttp import session
+
+client = session(
+    egress_url="http://SERVER_IP:8000",
+    egress_key="PROXY_KEY",
+    base_url="https://api.example.com/",
+)
+```
+
+**Keep your own session** and add the middleware; put it last so your own middlewares see the
+target URL:
+
+```python
+import aiohttp
+from egress_proxy.client.aiohttp import Middleware
+
+client = aiohttp.ClientSession(
+    middlewares=[Middleware(egress_url="http://SERVER_IP:8000", egress_key="PROXY_KEY")],
+)
+```
+
+`response.url`, redirects and cookies refer to the target, exactly as without the proxy.
+
+| Situation | Raised |
+|---|---|
+| Wrong key or invalid target URL | `egress_proxy.client.aiohttp.Refused` (an `aiohttp.ClientError`) |
+| Target did not answer in time | `aiohttp.ServerTimeoutError` (also a `TimeoutError`) |
+| Target unreachable | `aiohttp.ClientConnectionError` |
+| Proxy server unreachable | `aiohttp.ClientConnectorError` |
+
+With either client, errors are the library's own exceptions, so existing `except` blocks keep
+working, and responses with error statuses (404, 500, …) come back as normal responses.
 
 ## Server configuration
 
@@ -135,8 +172,8 @@ handled by your client, never stored on the server.
 
 ## Requirements
 
-Python 3.11+. The client needs httpx 0.25.1+; the server runs on uvicorn and aiohttp and handles
-about 13,000 requests per second on a single core.
+Python 3.11+. The clients need httpx 0.25.1+ or aiohttp 3.13+; the server runs on uvicorn and
+aiohttp and handles about 13,000 requests per second on a single core.
 
 ## License
 

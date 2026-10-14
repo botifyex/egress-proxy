@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from egress_proxy.client import AsyncClient, AsyncTransport, Client, Refused, Transport
+from egress_proxy.client.httpx import AsyncClient, AsyncTransport, Client, Refused, Transport
 from egress_proxy.protocol import Failure, Header
 
 EGRESS = "http://egress.local:8000"

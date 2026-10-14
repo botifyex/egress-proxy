@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from egress_proxy.client import AsyncClient, AsyncTransport, Client, Refused
+from egress_proxy.client.httpx import AsyncClient, AsyncTransport, Client, Refused
 from tests.support.servers import KEY
 from tests.support.upstream import COMPRESSED
 

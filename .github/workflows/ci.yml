@@ -59,11 +59,15 @@ jobs:
         with:
           cache-suffix: package
       - run: uv build
-      - name: Client extra installs without server dependencies
+      - name: Each client extra installs only its own library
         run: |
           wheel=$(ls dist/*.whl)
+          uv run --isolated --no-project --with "egress-proxy[client-httpx] @ ./$wheel" \
+            python -c "import egress_proxy.client.httpx; import importlib.util as u; assert u.find_spec('aiohttp') is None"
+          uv run --isolated --no-project --with "egress-proxy[client-aiohttp] @ ./$wheel" \
+            python -c "import egress_proxy.client.aiohttp; import importlib.util as u; assert u.find_spec('httpx') is None"
           uv run --isolated --no-project --with "egress-proxy[client] @ ./$wheel" \
-            python -c "import egress_proxy.client; import importlib.util as u; assert u.find_spec('aiohttp') is None"
+            python -c "import egress_proxy.client.httpx, egress_proxy.client.aiohttp"
       - name: Server extra provides the command
         run: |
           wheel=$(ls dist/*.whl)

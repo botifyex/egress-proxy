@@ -1,6 +1,6 @@
 import httpx
 
-from egress_proxy.client.route import Route
+from egress_proxy.client.httpx.route import Route
 
 
 class Transport(httpx.BaseTransport):

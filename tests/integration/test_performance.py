@@ -14,7 +14,7 @@ from types import ModuleType
 import httpx
 import pytest
 
-from egress_proxy.client import AsyncClient
+from egress_proxy.client.httpx import AsyncClient
 from egress_proxy.server import main
 from egress_proxy.server.application import Application, application
 from egress_proxy.server.settings import Proxy, Server

@@ -1,5 +1,12 @@
-from egress_proxy.client.client import AsyncClient, Client
-from egress_proxy.client.route import Refused
-from egress_proxy.client.transport import AsyncTransport, Transport
+from importlib import import_module
 
-__all__ = ["AsyncClient", "AsyncTransport", "Client", "Refused", "Transport"]
+
+class Missing(ModuleNotFoundError):
+    pass
+
+
+def require(library: str, extra: str) -> None:
+    try:
+        import_module(library)
+    except ModuleNotFoundError as error:
+        raise Missing(f"{library} is not installed: pip install 'egress-proxy[{extra}]'") from error
