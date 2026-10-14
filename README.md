@@ -5,9 +5,9 @@
 [![CI](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/botifyex/egress-proxy/blob/master/LICENSE)
 
-Send the HTTP requests of any httpx or aiohttp based Python project through your own server: they
-leave from the server's IP, or from upstream HTTP and SOCKS proxies it rotates through, with
-identifying headers removed.
+Send the HTTP requests of your Python project through your own server with a drop-in integration
+for its HTTP client: they leave from the server's IP, or from upstream HTTP and SOCKS proxies it
+rotates through, with identifying headers removed.
 
 ## Quick start
 

@@ -1,4 +1,4 @@
-"""egress-proxy: self-hosted egress proxy with drop-in httpx and aiohttp clients.
+"""egress-proxy: self-hosted egress proxy with drop-in integrations for Python HTTP clients.
 
 Source:  https://github.com/botifyex/egress-proxy
 Author:  botifyex

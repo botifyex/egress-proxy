@@ -1,7 +1,7 @@
 [project]
 name = "egress-proxy"
 version = "0.1.0"
-description = "Self-hosted egress proxy with drop-in httpx and aiohttp clients and upstream HTTP/SOCKS rotation"
+description = "Self-hosted egress proxy with drop-in integrations for Python HTTP clients and upstream HTTP/SOCKS rotation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
