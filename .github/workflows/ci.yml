@@ -72,3 +72,11 @@ jobs:
         run: |
           wheel=$(ls dist/*.whl)
           uv run --isolated --no-project --with "egress-proxy[server] @ ./$wheel" egress-proxy --help
+      - name: Command without the server extra names the extra to install
+        run: |
+          wheel=$(ls dist/*.whl)
+          if output=$(uv run --isolated --no-project --with "egress-proxy[client-httpx] @ ./$wheel" egress-proxy --help 2>&1); then
+            echo "::error::egress-proxy started without the server extra"
+            exit 1
+          fi
+          grep -F "pip install 'egress-proxy[server]'" <<<"$output"

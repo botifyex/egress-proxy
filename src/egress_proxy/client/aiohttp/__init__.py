@@ -1,6 +1,6 @@
-from egress_proxy.client import require
+from egress_proxy.extras import require
 
-require("aiohttp", "client-aiohttp")
+require("client-aiohttp", "aiohttp", "yarl")
 
 from egress_proxy.client.aiohttp.factory import session
 from egress_proxy.client.aiohttp.middleware import Middleware, Refused

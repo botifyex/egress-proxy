@@ -24,7 +24,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Server configuration from `.env` and the `egress-proxy` command, which accepts every
   uvicorn option.
 - Optional extras `client-httpx`, `client-aiohttp`, `client` (both), `server` and `all`; importing
-  an integration without its extra raises `Missing` with the install command.
+  a client integration or running `egress-proxy` without its extra raises
+  `egress_proxy.extras.Missing` with the install command.
 - Support for Python 3.11 to 3.14.
 
 ### Performance

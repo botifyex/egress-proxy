@@ -1,6 +1,6 @@
-from egress_proxy.client import require
+from egress_proxy.extras import require
 
-require("httpx", "client-httpx")
+require("client-httpx", "httpx")
 
 from egress_proxy.client.httpx.client import AsyncClient, Client
 from egress_proxy.client.httpx.route import Refused
