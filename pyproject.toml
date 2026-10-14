@@ -1,13 +1,13 @@
 [project]
 name = "egress-proxy"
 version = "0.1.0"
-description = "Authenticated egress proxy server with a drop-in httpx client"
+description = "Self-hosted egress proxy with drop-in httpx and aiohttp clients and upstream HTTP/SOCKS rotation"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT-0"
-license-files = ["LICENSE"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "botifyex" }]
-keywords = ["httpx", "proxy", "egress", "transport", "aiohttp"]
+keywords = ["httpx", "aiohttp", "proxy", "egress", "socks5", "http-proxy", "proxy-rotation"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: AsyncIO",

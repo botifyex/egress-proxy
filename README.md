@@ -1,7 +1,13 @@
 # egress-proxy
 
-Send the HTTP requests of any httpx-based Python project through your own server: they leave from
-the server's IP, with identifying headers removed.
+[![PyPI](https://img.shields.io/pypi/v/egress-proxy)](https://pypi.org/project/egress-proxy/)
+[![Python](https://img.shields.io/pypi/pyversions/egress-proxy)](https://pypi.org/project/egress-proxy/)
+[![CI](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/botifyex/egress-proxy/blob/master/LICENSE)
+
+Send the HTTP requests of any httpx or aiohttp based Python project through your own server: they
+leave from the server's IP, or from upstream HTTP and SOCKS proxies it rotates through, with
+identifying headers removed.
 
 ## Quick start
 
@@ -249,6 +255,11 @@ aiohttp and handles about 13,000 requests per second on a single core.
 
 ## License
 
-[MIT-0](https://github.com/botifyex/egress-proxy/blob/master/LICENSE): use it for anything, no
-attribution required. Contributing and releases:
+[Apache-2.0](https://github.com/botifyex/egress-proxy/blob/master/LICENSE): use, modify and
+distribute it freely, including commercially. Keep the license and the
+[NOTICE](https://github.com/botifyex/egress-proxy/blob/master/NOTICE) with every copy and mark the
+files you change.
+
+Contributing and releases:
 [CONTRIBUTING.md](https://github.com/botifyex/egress-proxy/blob/master/CONTRIBUTING.md).
+Security issues: [SECURITY.md](https://github.com/botifyex/egress-proxy/blob/master/SECURITY.md).
