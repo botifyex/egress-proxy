@@ -1,5 +1,6 @@
 import hmac
 from collections.abc import AsyncIterator
+from typing import TypeAlias
 
 import httpx
 from starlette.background import BackgroundTask
@@ -10,7 +11,7 @@ from egress_proxy.protocol import Failure, Header
 from egress_proxy.server.rejection import Rejection
 from egress_proxy.server.settings import Proxy
 
-type Pairs = list[tuple[bytes, bytes]]
+Pairs: TypeAlias = list[tuple[bytes, bytes]]
 
 SCHEMES = frozenset({"http", "https"})
 

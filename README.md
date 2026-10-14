@@ -7,6 +7,8 @@ pip install "egress-proxy[client]"   # httpx integration
 pip install "egress-proxy[server]"   # proxy server
 ```
 
+Supports Python 3.11+, httpx 0.25.1+, Starlette 0.27+ (works alongside FastAPI 0.100+).
+
 ## Server
 
 ```env

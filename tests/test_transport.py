@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -69,7 +71,7 @@ def test_method_headers_and_body_are_preserved() -> None:
     assert recorder.last.method == "PUT"
     assert recorder.last.headers["x-custom"] == "1"
     assert recorder.last.headers["content-type"] == "application/json"
-    assert recorder.last.content == b'{"name":"value"}'
+    assert json.loads(recorder.last.content) == {"name": "value"}
 
 
 def test_timeout_extension_is_preserved() -> None:

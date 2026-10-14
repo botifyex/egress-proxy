@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -13,7 +14,7 @@ async def test_asynchronous_client_round_trip(egress: str, target: str) -> None:
         response = await client.post("/echo", params={"page": 2}, json={"name": "value"})
     assert response.status_code == 200
     assert response.json()["query"] == "page=2"
-    assert response.json()["body"] == '{"name":"value"}'
+    assert json.loads(response.json()["body"]) == {"name": "value"}
 
 
 def test_synchronous_client_round_trip(egress: str, target: str) -> None:

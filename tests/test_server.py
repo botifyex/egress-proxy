@@ -1,5 +1,6 @@
 import gzip
 import hashlib
+import json
 from typing import Any
 
 import httpx
@@ -115,8 +116,8 @@ def test_hop_by_hop_headers_are_not_forwarded(egress: str, target: str) -> None:
 
 def test_body_is_forwarded_with_length(egress: str, target: str) -> None:
     response = send(egress, "POST", f"{target}/echo", json={"name": "value"})
-    assert response.json()["body"] == '{"name":"value"}'
-    assert received(response)["content-length"] == ["16"]
+    assert json.loads(response.json()["body"]) == {"name": "value"}
+    assert received(response)["content-length"] == [str(response.json()["length"])]
     assert "transfer-encoding" not in received(response)
 
 
