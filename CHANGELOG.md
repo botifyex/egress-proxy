@@ -23,6 +23,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   hop-by-hop and protocol headers.
 - Server configuration from `.env` and the `egress-proxy` command, which accepts every
   uvicorn option.
+- Upstream proxies: the server can spread requests across HTTP, HTTPS, SOCKS4 and SOCKS5
+  proxies listed in a file (`PROXY__UPSTREAMS_FILE` or `egress-proxy --upstreams-file`) or in
+  `PROXY__UPSTREAMS`, moving on to the next proxy when one is unreachable and leaving it out for
+  a cooldown.
 - Optional extras `client-httpx`, `client-aiohttp`, `client` (both), `server` and `all`; importing
   a client integration or running `egress-proxy` without its extra raises
   `egress_proxy.extras.Missing` with the install command.

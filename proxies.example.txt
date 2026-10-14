@@ -1,0 +1,12 @@
+# One upstream proxy per line; blank lines and lines starting with # are ignored.
+# Requests are spread across them in turn.
+#
+# http://   HTTP proxy (CONNECT tunnel)
+# https://  HTTP proxy reached over TLS
+# socks4:// SOCKS4 proxy
+# socks5:// SOCKS5 proxy, target host names resolved by the egress server
+# socks5h:// SOCKS5 proxy, target host names resolved by the proxy
+
+socks5h://user:password@proxy-1.example.net:1080
+socks5h://user:password@proxy-2.example.net:1080
+http://user:password@proxy-3.example.net:3128

@@ -1,0 +1,218 @@
+import os
+import signal
+import subprocess
+import sys
+import time
+from collections import Counter
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import TypeAlias
+
+import httpx
+import pytest
+
+from egress_proxy.protocol import Failure, Header
+from egress_proxy.server.application import Application, application
+from egress_proxy.server.settings import Proxy
+from tests.support.proxies import Kind, Running, serve
+from tests.support.proxies import Proxy as Tunnel
+from tests.support.servers import KEY, Fleet, bind
+
+Start: TypeAlias = Callable[..., Tunnel]
+
+
+@pytest.fixture
+def tunnels() -> Iterator[Start]:
+    running: list[Running] = []
+
+    def start(kind: Kind = "socks5", user: str | None = None, password: str | None = None) -> Tunnel:
+        running.append(serve(Tunnel(kind, user, password)))
+        return running[-1].proxy
+
+    yield start
+    for item in running:
+        item.stop()
+
+
+def reachable(port: int) -> bool:
+    try:
+        httpx.get(f"http://127.0.0.1:{port}/", timeout=0.2)
+    except httpx.TransportError:
+        return False
+    return True
+
+
+@contextmanager
+def command(*arguments: str) -> Iterator[str]:
+    listener = bind()
+    port = listener.getsockname()[1]
+    listener.close()
+    process = subprocess.Popen(
+        [sys.executable, "-c", "from egress_proxy.server.main import run; run()", "--port", str(port), *arguments],
+        env={**os.environ, "PROXY__KEY": KEY},
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + 20
+    while not reachable(port):
+        if time.monotonic() > deadline or process.poll() is not None:
+            raise TimeoutError("egress-proxy did not start")
+        time.sleep(0.1)
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=20)
+
+
+@pytest.fixture(scope="module")
+def local() -> Iterator[Fleet]:
+    fleet = Fleet()
+    yield fleet
+    fleet.stop()
+
+
+@pytest.fixture
+def dead(unreachable: str) -> str:
+    return unreachable.replace("http://", "socks5://")
+
+
+class Egress:
+    def __init__(self, fleet: Fleet, upstreams: list[str], **options: float) -> None:
+        self.application: Application = application(Proxy(key=KEY, upstreams=upstreams, **options))
+        self.url = fleet.start(self.application)
+
+    def get(self, target: str, **options: object) -> httpx.Response:
+        headers = {Header.KEY: KEY, Header.TARGET: target}
+        return httpx.request("GET", self.url, headers=headers, timeout=10, **options)
+
+    def post(self, target: str, content: bytes) -> httpx.Response:
+        headers = {Header.KEY: KEY, Header.TARGET: target}
+        return httpx.post(self.url, headers=headers, content=content, timeout=10)
+
+    def resting(self) -> list[str]:
+        forward = self.application.forward
+        assert forward is not None
+        return [route.name for route in forward.balancer.routes if route.resting > forward.balancer.clock()]
+
+
+@pytest.mark.parametrize("kind", ["socks5", "http"])
+def test_requests_go_through_the_upstream_proxy(local: Fleet, target: str, tunnels: Start, kind: Kind) -> None:
+    proxy = tunnels(kind)
+    response = Egress(local, [proxy.url]).get(f"{target}/echo?via={kind}")
+    assert response.status_code == 200
+    assert response.json()["query"] == f"via={kind}"
+    assert proxy.tunnels == 1
+
+
+@pytest.mark.parametrize("kind", ["socks5", "http"])
+def test_proxy_credentials_are_used(local: Fleet, target: str, tunnels: Start, kind: Kind) -> None:
+    proxy = tunnels(kind, "user", "secret")
+    assert Egress(local, [proxy.url]).get(f"{target}/echo").status_code == 200
+
+
+def test_socks5h_lets_the_proxy_resolve_host_names(local: Fleet, target: str, tunnels: Start) -> None:
+    proxy = tunnels("socks5")
+    named = target.replace("127.0.0.1", "localhost")
+    Egress(local, [proxy.url.replace("socks5://", "socks5h://")]).get(f"{named}/echo")
+    assert proxy.targets[-1].startswith("localhost:")
+
+
+def test_socks5_resolves_host_names_on_the_egress_server(local: Fleet, target: str, tunnels: Start) -> None:
+    proxy = tunnels("socks5")
+    named = target.replace("127.0.0.1", "localhost")
+    Egress(local, [proxy.url]).get(f"{named}/echo")
+    assert not proxy.targets[-1].startswith("localhost:")
+
+
+def test_requests_are_spread_evenly_across_upstreams(local: Fleet, target: str, tunnels: Start) -> None:
+    proxies = [tunnels("socks5"), tunnels("http"), tunnels("socks5")]
+    egress = Egress(local, [proxy.url for proxy in proxies])
+    ports = Counter(egress.get(f"{target}/connection").text for _ in range(30))
+    assert sorted(ports.values()) == [10, 10, 10]
+    assert [proxy.tunnels for proxy in proxies] == [1, 1, 1]
+
+
+def test_unreachable_upstream_is_skipped_and_rested(local: Fleet, target: str, tunnels: Start, dead: str) -> None:
+    alive = tunnels("socks5")
+    egress = Egress(local, [dead, alive.url])
+    statuses = [egress.get(f"{target}/echo").status_code for _ in range(6)]
+    assert statuses == [200] * 6
+    assert egress.resting() == [dead]
+
+
+def test_request_body_survives_a_failover(local: Fleet, target: str, tunnels: Start, dead: str) -> None:
+    alive = tunnels("http")
+    payload = bytes(range(256)) * 400
+    response = Egress(local, [dead, alive.url]).post(f"{target}/echo", payload)
+    assert response.json()["length"] == len(payload)
+
+
+def test_rested_upstream_returns_after_cooldown(local: Fleet, target: str, tunnels: Start, dead: str) -> None:
+    alive = tunnels("socks5")
+    egress = Egress(local, [dead, alive.url], cooldown=0)
+    egress.get(f"{target}/echo")
+    assert egress.resting() == []
+
+
+def test_all_upstreams_unreachable_is_reported(local: Fleet, target: str, dead: str) -> None:
+    egress = Egress(local, [dead, dead.replace("socks5://", "http://")])
+    response = egress.get(f"{target}/echo")
+    assert response.status_code == 502
+    assert response.headers[Header.FAILURE] == Failure.UNREACHABLE
+    assert "is unreachable" in response.text
+    assert len(egress.resting()) == 2
+
+
+def test_attempts_limit_the_failover(local: Fleet, target: str, tunnels: Start, dead: str) -> None:
+    alive = tunnels("socks5")
+    egress = Egress(local, [dead, dead, alive.url], attempts=2)
+    response = egress.get(f"{target}/echo")
+    assert response.status_code == 502
+    assert alive.tunnels == 0
+
+
+def test_wrong_proxy_credentials_fail_over_without_resting(local: Fleet, target: str, tunnels: Start) -> None:
+    locked = tunnels("socks5", "user", "secret")
+    alive = tunnels("http")
+    egress = Egress(local, [locked.url.replace("secret", "wrong"), alive.url])
+    assert egress.get(f"{target}/echo").status_code == 200
+    assert egress.resting() == []
+
+
+def test_target_unreachable_through_proxies_rests_nothing(
+    local: Fleet,
+    tunnels: Start,
+    unreachable: str,
+) -> None:
+    proxies = [tunnels("socks5"), tunnels("http")]
+    egress = Egress(local, [proxy.url for proxy in proxies])
+    response = egress.get(f"{unreachable}/")
+    assert response.status_code == 502
+    assert "through upstream proxy" in response.text
+    assert egress.resting() == []
+
+
+def test_upstream_errors_do_not_leak_proxy_passwords(local: Fleet, target: str, unreachable: str) -> None:
+    egress = Egress(local, [unreachable.replace("http://", "socks5://user:secret@")])
+    response = egress.get(f"{target}/echo")
+    assert response.status_code == 502
+    assert "secret" not in response.text
+
+
+def test_timeout_after_tunnel_is_not_retried(local: Fleet, target: str, tunnels: Start) -> None:
+    proxies = [tunnels("socks5"), tunnels("socks5")]
+    egress = Egress(local, [proxy.url for proxy in proxies], timeout=0.1)
+    response = egress.get(f"{target}/slow")
+    assert response.status_code == 504
+    assert sum(proxy.tunnels for proxy in proxies) == 1
+
+
+def test_command_option_routes_workers_through_the_file(target: str, tunnels: Start, tmp_path: Path) -> None:
+    proxy = tunnels("socks5")
+    path = tmp_path / "proxies.txt"
+    path.write_text(f"# test proxy\n{proxy.url}\n")
+    with command("--upstreams-file", str(path), "--workers", "2") as egress:
+        responses = [httpx.get(egress, headers={Header.KEY: KEY, Header.TARGET: f"{target}/echo"}) for _ in range(6)]
+    assert [response.status_code for response in responses] == [200] * 6
+    assert proxy.tunnels >= 1

@@ -1,4 +1,6 @@
-from pydantic import SecretStr
+from pathlib import Path
+
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,5 +19,14 @@ class Proxy(BaseSettings):
     key: SecretStr
     timeout: float = 30.0
     connect: float = 10.0
+    upstreams: list[str] = []
+    upstreams_file: Path | None = None
+    cooldown: float = Field(default=30.0, ge=0)
+    attempts: int = Field(default=3, ge=1)
 
     model_config = configuration("PROXY__")
+
+    @field_validator("upstreams_file", mode="before")
+    @classmethod
+    def unset(cls, value: object) -> object:
+        return None if value == "" else value

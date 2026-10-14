@@ -138,6 +138,10 @@ precedence. Template: [`.env.example`](https://github.com/botifyex/egress-proxy/
 | `PROXY__KEY` | required | Key every client must send |
 | `PROXY__TIMEOUT` | `30` | Seconds to wait for the target |
 | `PROXY__CONNECT` | `10` | Seconds to connect to the target |
+| `PROXY__UPSTREAMS_FILE` | none | File with upstream proxies, see below; `--upstreams-file` overrides it |
+| `PROXY__UPSTREAMS` | `[]` | Upstream proxies inline, as a JSON list |
+| `PROXY__COOLDOWN` | `30` | Seconds an unreachable upstream proxy is left out |
+| `PROXY__ATTEMPTS` | `3` | Upstream proxies tried per request before giving up |
 | `SERVER__HOST` | `127.0.0.1` | Address to listen on |
 | `SERVER__PORT` | `8000` | Port to listen on |
 
@@ -160,6 +164,44 @@ either directly or behind a TLS-terminating reverse proxy, and use `https://` in
 ```sh
 egress-proxy --host 0.0.0.0 --port 443 --ssl-keyfile key.pem --ssl-certfile cert.pem
 ```
+
+## Upstream proxies
+
+Without upstream proxies the server sends requests itself. List HTTP or SOCKS proxies and it spreads
+requests across them in turn instead, so they leave from the proxies' IPs:
+
+```sh
+cat > proxies.txt <<'EOF'
+socks5h://user:password@proxy-1.example.net:1080
+http://user:password@proxy-2.example.net:3128
+EOF
+echo "PROXY__UPSTREAMS_FILE=proxies.txt" >> .env
+```
+
+One proxy URL per line; blank lines and `#` comments are ignored. Template:
+[`proxies.example.txt`](https://github.com/botifyex/egress-proxy/blob/master/proxies.example.txt).
+
+| Scheme | Proxy |
+|---|---|
+| `http://`, `https://` | HTTP proxy (CONNECT), `https` reaches the proxy over TLS |
+| `socks5h://` | SOCKS5, host names resolved by the proxy |
+| `socks5://` | SOCKS5, host names resolved by the egress server |
+| `socks4://` | SOCKS4 |
+
+The file can also be given on the command line, which overrides `.env`:
+
+```sh
+egress-proxy --upstreams-file proxies.txt --host 0.0.0.0
+```
+
+A few proxies can go straight into `.env` instead: `PROXY__UPSTREAMS=["socks5h://host:1080"]`.
+Both sources can be combined; the file comes first.
+
+If a proxy cannot be reached, the request moves on to the next one and the unreachable proxy is
+left out for `PROXY__COOLDOWN` seconds. A proxy that refuses the tunnel, for example over a wrong
+password or a target it cannot reach, is skipped for that request only. The client gets a 502 once
+`PROXY__ATTEMPTS` proxies have failed. An invalid proxy URL stops the server at startup with its
+file and line.
 
 ## How it works
 

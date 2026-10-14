@@ -1,4 +1,5 @@
 import importlib
+import os
 import socket
 import sys
 
@@ -17,6 +18,8 @@ def run(monkeypatch: pytest.MonkeyPatch, *arguments: str) -> list[str]:
 
     monkeypatch.setattr(uvicorn.main, "main", fake)
     monkeypatch.setattr(uvicorn.Config, "bind_socket", uvicorn.Config.bind_socket)
+    monkeypatch.setattr(uvicorn.main, "epilog", uvicorn.main.epilog)
+    monkeypatch.setenv(main.UPSTREAMS, os.environ.get(main.UPSTREAMS, ""))
     monkeypatch.setattr(sys, "argv", ["egress-proxy", *arguments])
     monkeypatch.setattr(main, "Server", lambda: Server(host="10.0.0.1", port=7000))
     main.run()
@@ -96,3 +99,38 @@ def test_run_installs_nagle_fix(monkeypatch: pytest.MonkeyPatch) -> None:
     original = uvicorn.Config.bind_socket
     run(monkeypatch)
     assert uvicorn.Config.bind_socket is not original
+
+
+@pytest.mark.parametrize("arguments", [("--upstreams-file", "proxies.txt"), ("--upstreams-file=proxies.txt",)])
+def test_upstreams_file_option_sets_the_setting(monkeypatch: pytest.MonkeyPatch, arguments: tuple[str, ...]) -> None:
+    passed = run(monkeypatch, "--port", "9000", *arguments)
+    assert os.environ[main.UPSTREAMS] == "proxies.txt"
+    assert not any(argument.startswith("--upstreams-file") for argument in passed)
+    assert value(passed, "--port") == "9000"
+
+
+def test_upstreams_file_option_overrides_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(main.UPSTREAMS, "from-environment.txt")
+    run(monkeypatch, "--upstreams-file", "from-command.txt")
+    assert os.environ[main.UPSTREAMS] == "from-command.txt"
+
+
+def test_without_option_environment_is_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(main.UPSTREAMS, "from-environment.txt")
+    run(monkeypatch)
+    assert os.environ[main.UPSTREAMS] == "from-environment.txt"
+
+
+def test_option_needs_a_path(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        run(monkeypatch, "--upstreams-file")
+    assert "--upstreams-file: expected one argument" in capsys.readouterr().err
+
+
+def test_option_is_not_matched_by_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert "--upstreams" in run(monkeypatch, "--upstreams", "x")
+
+
+def test_help_describes_the_option(monkeypatch: pytest.MonkeyPatch) -> None:
+    run(monkeypatch, "--help")
+    assert "--upstreams-file PATH" in uvicorn.main.epilog

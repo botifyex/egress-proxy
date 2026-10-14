@@ -1,6 +1,8 @@
 from egress_proxy.server.asgi import Receive, Scope, Send
-from egress_proxy.server.forward import Forward, session
+from egress_proxy.server.forward import Forward
+from egress_proxy.server.routes import balancer
 from egress_proxy.server.settings import Proxy
+from egress_proxy.server.upstreams import configured
 
 
 class Unstarted(RuntimeError):
@@ -10,14 +12,15 @@ class Unstarted(RuntimeError):
 class Application:
     def __init__(self, proxy: Proxy) -> None:
         self.proxy = proxy
+        self.upstreams = configured(proxy)
         self.forward: Forward | None = None
 
     async def startup(self) -> None:
-        self.forward = Forward(session(self.proxy), self.proxy)
+        self.forward = Forward(balancer(self.proxy, self.upstreams), self.proxy)
 
     async def shutdown(self) -> None:
         if self.forward is not None:
-            await self.forward.client.close()
+            await self.forward.balancer.close()
             self.forward = None
 
     async def lifespan(self, receive: Receive, send: Send) -> None:

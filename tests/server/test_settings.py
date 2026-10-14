@@ -68,3 +68,5 @@ def test_example_is_loadable(isolated: Path) -> None:
     assert (Server().host, Server().port) == (Server.model_fields["host"].default, Server.model_fields["port"].default)
     assert Proxy().key.get_secret_value() == "change-me"
     assert (Proxy().timeout, Proxy().connect) == (30, 10)
+    assert (Proxy().upstreams, Proxy().upstreams_file) == ([], None)
+    assert (Proxy().cooldown, Proxy().attempts) == (30, 3)

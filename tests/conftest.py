@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 
 import pytest
@@ -6,6 +7,17 @@ from egress_proxy.server.application import application
 from egress_proxy.server.settings import Proxy
 from tests.support.servers import KEY, Fleet, bind
 from tests.support.upstream import upstream
+
+SETTINGS = ("PROXY__", "SERVER__")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def sandbox(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(tmp_path_factory.mktemp("work"))
+        for name in [name for name in os.environ if name.startswith(SETTINGS)]:
+            patch.delenv(name)
+        yield
 
 
 @pytest.fixture(scope="session")

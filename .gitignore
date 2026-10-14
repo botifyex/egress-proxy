@@ -152,6 +152,7 @@ activemq-data/
 # Environments
 .env
 .envrc
+proxies.txt
 .venv
 env/
 venv/
