@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+
 ### Added
 
 - `PROXY__SHUFFLE` (off by default) shuffles the upstream proxies when a worker starts, using a
@@ -60,5 +62,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - `egress-proxy --workers N` disables Nagle's algorithm on its listening socket, removing
   a 40 ms delay per response in multi-process mode.
 
-[Unreleased]: https://github.com/botifyex/egress-proxy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/botifyex/egress-proxy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/botifyex/egress-proxy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/botifyex/egress-proxy/releases/tag/v0.1.0
