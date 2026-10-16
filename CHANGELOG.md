@@ -7,6 +7,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- `PROXY__SHUFFLE` (off by default) shuffles the upstream proxies when a worker starts, using a
+  cryptographically secure generator, so workers no longer all begin at the first proxy.
+
 ### Changed
 
 - Running `egress-proxy` without the `server` extra prints one line naming the extra to install

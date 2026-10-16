@@ -148,6 +148,7 @@ precedence. Template: [`.env.example`](https://github.com/botifyex/egress-proxy/
 | `PROXY__UPSTREAMS` | `[]` | Upstream proxies inline, as a JSON list |
 | `PROXY__COOLDOWN` | `30` | Seconds an unreachable upstream proxy is left out |
 | `PROXY__ATTEMPTS` | `3` | Upstream proxies tried per request before giving up |
+| `PROXY__SHUFFLE` | `false` | Shuffle upstream proxies at startup, separately in every worker, see below |
 | `PROXY__ALLOW_LOCAL` | `false` | Allow targets on local and private networks, see below |
 | `SERVER__HOST` | `127.0.0.1` | Address to listen on |
 | `SERVER__PORT` | `8000` | Port to listen on |
@@ -224,6 +225,11 @@ left out for `PROXY__COOLDOWN` seconds. A proxy that refuses the tunnel, for exa
 password or a target it cannot reach, is skipped for that request only. The client gets a 502 once
 `PROXY__ATTEMPTS` proxies have failed. An invalid proxy URL stops the server at startup with its
 file and line.
+
+Every worker rotates through the proxies on its own, and each starts from the first one in the
+list. With `--workers` above 1 and few requests, the first proxies therefore get a little more
+traffic. `PROXY__SHUFFLE=true` shuffles the list when a worker starts, with a cryptographically
+secure random generator, so each worker begins at a different proxy.
 
 ## How it works
 

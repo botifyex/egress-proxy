@@ -8,9 +8,9 @@ from aiohttp_socks import ProxyConnector, ProxyError
 
 from egress_proxy.server.forward import Forward
 from egress_proxy.server.rejection import Rejection
-from egress_proxy.server.routes import DIRECT, Balancer, Route, balancer
+from egress_proxy.server.routes import DIRECT, Balancer, Route, balancer, shuffled
 from egress_proxy.server.settings import Proxy
-from egress_proxy.server.upstreams import parse
+from egress_proxy.server.upstreams import Upstream, parse
 
 
 @dataclass
@@ -132,3 +132,46 @@ async def test_started_body_is_never_replayed() -> None:
     with pytest.raises(Rejection, match="through upstream proxy a"):
         await forward.request(scope, receive)
     assert [item.calls for item in clients] == [1, 0]
+
+
+def upstreams(*hosts: str) -> list[Upstream]:
+    return [parse(f"socks5h://{host}.example.net:1080", host) for host in hosts]
+
+
+def hosts(chosen: list[Upstream]) -> list[str]:
+    return [str(upstream.url.host).split(".")[0] for upstream in chosen]
+
+
+def route_hosts(subject: Balancer) -> list[str]:
+    return [name.removeprefix("socks5h://").split(".")[0] for name in names(subject.routes)]
+
+
+class Reversing:
+    def shuffle(self, items: list[Upstream]) -> None:
+        items.reverse()
+
+
+async def test_upstreams_keep_their_order_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("egress_proxy.server.routes.secrets.SystemRandom", Reversing)
+    subject = balancer(Proxy(key="key"), upstreams("a", "b", "c"))
+    assert route_hosts(subject) == ["a", "b", "c"]
+    await subject.close()
+
+
+async def test_shuffle_uses_the_secure_generator(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("egress_proxy.server.routes.secrets.SystemRandom", Reversing)
+    subject = balancer(Proxy(key="key", shuffle=True), upstreams("a", "b", "c"))
+    assert route_hosts(subject) == ["c", "b", "a"]
+    await subject.close()
+
+
+def test_shuffled_keeps_every_upstream_and_the_original_list() -> None:
+    original = upstreams("a", "b", "c", "d")
+    mixed = shuffled(original)
+    assert sorted(hosts(mixed)) == ["a", "b", "c", "d"]
+    assert hosts(original) == ["a", "b", "c", "d"]
+
+
+def test_shuffled_can_start_with_any_upstream() -> None:
+    original = upstreams("a", "b", "c")
+    assert {hosts(shuffled(original))[0] for _ in range(300)} == {"a", "b", "c"}

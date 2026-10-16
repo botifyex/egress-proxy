@@ -1,4 +1,5 @@
 import logging
+import secrets
 import ssl
 import time
 from collections.abc import Callable
@@ -109,6 +110,16 @@ def routes(proxy: Proxy, upstreams: list[Upstream]) -> list[Route]:
     return [Route(upstream.name, client(proxy, tunnel(upstream, context))) for upstream in upstreams]
 
 
+def shuffled(upstreams: list[Upstream]) -> list[Upstream]:
+    mixed = list(upstreams)
+    secrets.SystemRandom().shuffle(mixed)
+    return mixed
+
+
+def ordered(proxy: Proxy, upstreams: list[Upstream]) -> list[Upstream]:
+    return shuffled(upstreams) if proxy.shuffle else upstreams
+
+
 def balancer(proxy: Proxy, upstreams: list[Upstream] | None = None) -> Balancer:
     chosen = configured(proxy) if upstreams is None else upstreams
-    return Balancer(routes(proxy, chosen), proxy.cooldown, proxy.attempts)
+    return Balancer(routes(proxy, ordered(proxy, chosen)), proxy.cooldown, proxy.attempts)
