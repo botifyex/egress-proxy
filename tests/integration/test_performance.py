@@ -2,13 +2,15 @@ import asyncio
 import statistics
 import sys
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Coroutine, Generator, Iterator, Sequence
 from importlib.abc import MetaPathFinder
 from importlib.machinery import ModuleSpec
 from types import ModuleType
+from typing import Any, TypeAlias, TypeVar
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from egress_proxy.client.httpx import AsyncClient
 from egress_proxy.server import main
@@ -40,17 +42,25 @@ def spy(monkeypatch: pytest.MonkeyPatch) -> Iterator[Spy]:
 
 
 @pytest.fixture
-async def started() -> Iterator[Application]:
-    instance = application(Proxy(key=KEY, allow_local=True))
+async def started() -> AsyncIterator[Application]:
+    instance = application(Proxy(key=SecretStr(KEY), allow_local=True))
     await instance.startup()
     yield instance
     await instance.shutdown()
 
 
+T = TypeVar("T")
+
+if sys.version_info >= (3, 12):
+    Routine: TypeAlias = Coroutine[Any, Any, T]
+else:
+    Routine: TypeAlias = Generator[Any, None, T] | Coroutine[Any, Any, T]
+
+
 def counting(created: list[str]) -> None:
     loop = asyncio.get_running_loop()
 
-    def factory(loop: asyncio.AbstractEventLoop, coroutine: object, **options: object) -> asyncio.Task[object]:
+    def factory(loop: asyncio.AbstractEventLoop, coroutine: Routine[T], **options: Any) -> asyncio.Task[T]:
         created.append(getattr(coroutine, "__qualname__", repr(coroutine)))
         return asyncio.Task(coroutine, loop=loop, **options)
 
@@ -59,7 +69,7 @@ def counting(created: list[str]) -> None:
 
 @pytest.fixture
 def fresh(fleet: Fleet) -> str:
-    return fleet.start(application(Proxy(key=KEY, allow_local=True)))
+    return fleet.start(application(Proxy(key=SecretStr(KEY), allow_local=True)))
 
 
 async def sequential(client: AsyncClient, count: int) -> set[str]:

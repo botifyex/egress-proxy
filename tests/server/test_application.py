@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
 
 import pytest
+from pydantic import SecretStr
 
 from egress_proxy.server.application import Unstarted, application
 from egress_proxy.server.asgi import Message
@@ -27,7 +28,7 @@ class Recorder:
 
 
 async def test_lifespan_opens_and_closes_the_upstream_session() -> None:
-    instance = application(Proxy(key=KEY))
+    instance = application(Proxy(key=SecretStr(KEY)))
     recorder = Recorder()
     await instance(
         {"type": "lifespan"}, receiver({"type": "lifespan.startup"}, {"type": "lifespan.shutdown"}), recorder
@@ -41,18 +42,18 @@ async def test_lifespan_opens_and_closes_the_upstream_session() -> None:
 
 async def test_requests_before_startup_are_refused() -> None:
     with pytest.raises(Unstarted):
-        await application(Proxy(key=KEY))({"type": "http"}, receiver(), Recorder())
+        await application(Proxy(key=SecretStr(KEY)))({"type": "http"}, receiver(), Recorder())
 
 
 async def test_shutdown_without_startup_is_harmless() -> None:
-    instance = application(Proxy(key=KEY))
+    instance = application(Proxy(key=SecretStr(KEY)))
     await instance.shutdown()
     assert instance.forward is None
 
 
 async def test_websocket_connections_are_ignored() -> None:
     recorder = Recorder()
-    await application(Proxy(key=KEY))({"type": "websocket"}, receiver(), recorder)
+    await application(Proxy(key=SecretStr(KEY)))({"type": "websocket"}, receiver(), recorder)
     assert recorder.messages == []
 
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from egress_proxy.server.settings import Proxy, Server
 
@@ -56,7 +56,7 @@ def test_unrelated_variables_are_ignored(isolated: Path) -> None:
 
 
 def test_key_is_hidden_in_representation() -> None:
-    assert "hidden" not in repr(Proxy(key="hidden"))
+    assert "hidden" not in repr(Proxy(key=SecretStr("hidden")))
 
 
 def test_example_lists_every_setting() -> None:
@@ -74,4 +74,4 @@ def test_example_is_loadable(isolated: Path) -> None:
 
 def test_empty_key_is_rejected() -> None:
     with pytest.raises(ValidationError, match="at least 1 item"):
-        Proxy(key="")
+        Proxy(key=SecretStr(""))

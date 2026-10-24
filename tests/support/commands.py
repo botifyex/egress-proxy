@@ -3,7 +3,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import httpx
@@ -59,7 +59,7 @@ def stop(process: subprocess.Popen[bytes]) -> None:
 
 
 @contextmanager
-def command(*arguments: str, timeout: float = 20) -> Iterator[str]:
+def command(*arguments: str, timeout: float = 20) -> Generator[str, None, None]:
     port = free()
     process = subprocess.Popen(
         [sys.executable, "-c", RUN, "--port", str(port), *arguments],

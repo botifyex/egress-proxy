@@ -29,6 +29,7 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check src tests benchmarks
       - run: uv run ruff format --check src tests benchmarks
+      - run: uv run basedpyright
 
   test:
     name: test (python ${{ matrix.python }}, ${{ matrix.dependencies.name }})

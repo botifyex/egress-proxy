@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from aiohttp_socks import ProxyType
+from pydantic import SecretStr
 
 from egress_proxy.server.settings import Proxy
 from egress_proxy.server.upstreams import Malformed, configured, entries, parse
@@ -72,13 +73,13 @@ def test_file_line_is_named_in_errors(tmp_path: Path) -> None:
     path = tmp_path / "proxies.txt"
     path.write_text("socks5://a.example.net:1080\nftp://b.example.net:21\n")
     with pytest.raises(Malformed, match=rf"^{path}:2: unsupported"):
-        configured(Proxy(key="key", upstreams_file=path))
+        configured(Proxy(key=SecretStr("key"), upstreams_file=path))
 
 
 def test_file_and_inline_upstreams_are_combined_in_order(tmp_path: Path) -> None:
     path = tmp_path / "proxies.txt"
     path.write_text("socks5://from-file.example.net:1080\n")
-    proxy = Proxy(key="key", upstreams_file=path, upstreams=["http://inline.example.net:3128"])
+    proxy = Proxy(key=SecretStr("key"), upstreams_file=path, upstreams=["http://inline.example.net:3128"])
     assert [upstream.name for upstream in configured(proxy)] == [
         "socks5://from-file.example.net:1080",
         "http://inline.example.net:3128",
@@ -87,11 +88,11 @@ def test_file_and_inline_upstreams_are_combined_in_order(tmp_path: Path) -> None
 
 def test_inline_errors_name_the_setting() -> None:
     with pytest.raises(Malformed, match=r"^PROXY__UPSTREAMS\[1\]:"):
-        configured(Proxy(key="key", upstreams=["http://ok.example.net:3128", "ftp://bad.example.net:21"]))
+        configured(Proxy(key=SecretStr("key"), upstreams=["http://ok.example.net:3128", "ftp://bad.example.net:21"]))
 
 
 def test_no_upstreams_means_direct() -> None:
-    assert configured(Proxy(key="key")) == []
+    assert configured(Proxy(key=SecretStr("key"))) == []
 
 
 def test_settings_read_upstreams_from_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -108,10 +109,10 @@ def test_settings_read_upstreams_from_environment(monkeypatch: pytest.MonkeyPatc
 
 def test_empty_file_setting_means_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PROXY__UPSTREAMS_FILE", "")
-    assert Proxy(key="key").upstreams_file is None
+    assert Proxy(key=SecretStr("key")).upstreams_file is None
 
 
 @pytest.mark.parametrize(("name", "value"), [("attempts", 0), ("cooldown", -1)])
 def test_retry_settings_are_validated(name: str, value: int) -> None:
     with pytest.raises(ValueError):
-        Proxy(key="key", **{name: value})
+        Proxy.model_validate({"key": "key", name: value})

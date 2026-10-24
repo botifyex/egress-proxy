@@ -5,6 +5,7 @@ from typing import cast
 import aiohttp
 import pytest
 from aiohttp_socks import ProxyConnector, ProxyError
+from pydantic import SecretStr
 
 from egress_proxy.server.forward import Forward
 from egress_proxy.server.rejection import Rejection
@@ -87,7 +88,7 @@ async def test_close_closes_every_route() -> None:
 
 
 async def test_no_upstreams_gives_one_direct_route() -> None:
-    subject = balancer(Proxy(key="key"), [])
+    subject = balancer(Proxy(key=SecretStr("key")), [])
     assert names(subject.routes) == [DIRECT]
     assert not isinstance(subject.routes[0].client.connector, ProxyConnector)
     await subject.close()
@@ -95,7 +96,7 @@ async def test_no_upstreams_gives_one_direct_route() -> None:
 
 async def test_each_upstream_gets_its_own_tunnelled_session() -> None:
     upstreams = [parse("socks5h://user:secret@a.example.net:1080", "a"), parse("http://b.example.net:3128", "b")]
-    subject = balancer(Proxy(key="key", cooldown=5, attempts=2), upstreams)
+    subject = balancer(Proxy(key=SecretStr("key"), cooldown=5, attempts=2), upstreams)
     assert names(subject.routes) == ["socks5h://a.example.net:1080", "http://b.example.net:3128"]
     assert all(isinstance(route.client.connector, ProxyConnector) for route in subject.routes)
     assert (subject.cooldown, subject.attempts) == (5, 2)
@@ -119,8 +120,8 @@ class Consuming:
 async def test_started_body_is_never_replayed() -> None:
     clients = [Consuming(), Consuming()]
     pool = [Route(name, cast(aiohttp.ClientSession, item)) for name, item in zip("ab", clients, strict=True)]
-    forward = Forward(Balancer(pool, cooldown=30, attempts=2), Proxy(key="key"))
-    messages = [{"type": "http.request", "body": b"payload", "more_body": False}]
+    forward = Forward(Balancer(pool, cooldown=30, attempts=2), Proxy(key=SecretStr("key")))
+    messages: list[dict[str, object]] = [{"type": "http.request", "body": b"payload", "more_body": False}]
 
     async def receive() -> dict[str, object]:
         return messages.pop(0)
@@ -153,14 +154,14 @@ class Reversing:
 
 async def test_upstreams_keep_their_order_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("egress_proxy.server.routes.secrets.SystemRandom", Reversing)
-    subject = balancer(Proxy(key="key"), upstreams("a", "b", "c"))
+    subject = balancer(Proxy(key=SecretStr("key")), upstreams("a", "b", "c"))
     assert route_hosts(subject) == ["a", "b", "c"]
     await subject.close()
 
 
 async def test_shuffle_uses_the_secure_generator(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("egress_proxy.server.routes.secrets.SystemRandom", Reversing)
-    subject = balancer(Proxy(key="key", shuffle=True), upstreams("a", "b", "c"))
+    subject = balancer(Proxy(key=SecretStr("key"), shuffle=True), upstreams("a", "b", "c"))
     assert route_hosts(subject) == ["c", "b", "a"]
     await subject.close()
 

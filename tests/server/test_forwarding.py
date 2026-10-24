@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from egress_proxy.protocol import Failure, Header
 from egress_proxy.server.application import application
@@ -246,7 +247,7 @@ def test_headers_named_by_connection_do_not_reach_the_target(egress: str, target
 
 @pytest.fixture(scope="module")
 def strict(fleet: Fleet) -> str:
-    return fleet.start(application(Proxy(key=KEY)))
+    return fleet.start(application(Proxy(key=SecretStr(KEY))))
 
 
 @pytest.mark.parametrize(

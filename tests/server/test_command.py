@@ -145,7 +145,7 @@ def test_option_is_not_matched_by_prefix(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_help_describes_the_option(monkeypatch: pytest.MonkeyPatch) -> None:
     run(monkeypatch, "--help")
-    assert "--upstreams-file PATH" in uvicorn.main.epilog
+    assert "--upstreams-file PATH" in (uvicorn.main.epilog or "")
 
 
 def test_invalid_upstreams_stop_before_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -8,11 +8,13 @@ uv run pytest --cov
 uv run pytest -n auto            # parallel, pays off once the suite grows beyond a few seconds
 uv run ruff check src tests benchmarks
 uv run ruff format src tests benchmarks
+uv run basedpyright
 uv run egress-proxy
 ```
 
-Every push and pull request runs CI: ruff, the test suite on Python 3.11–3.14 against both the
-lowest and the latest allowed dependencies, and a wheel smoke test.
+Every push and pull request runs CI: ruff, basedpyright in strict mode, the test suite on
+Python 3.11–3.14 against both the lowest and the latest allowed dependencies, and a wheel smoke
+test.
 
 ## Benchmarks
 

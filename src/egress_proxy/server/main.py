@@ -81,6 +81,6 @@ def defaults(server: Server) -> list[str]:
 def run() -> None:
     rest = separated(sys.argv[1:])
     validate(rest)
-    uvicorn.Config.bind_socket = immediate(uvicorn.Config.bind_socket)
+    uvicorn.Config.bind_socket = immediate(uvicorn.Config.bind_socket)  # pyright: ignore[reportAttributeAccessIssue]
     uvicorn.main.epilog = EPILOG
     uvicorn.main.main(args=[*defaults(Server()), *rest], prog_name="egress-proxy")

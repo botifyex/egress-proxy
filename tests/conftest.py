@@ -2,6 +2,7 @@ import os
 from collections.abc import Iterator
 
 import pytest
+from pydantic import SecretStr
 
 from egress_proxy.server.application import application
 from egress_proxy.server.settings import Proxy
@@ -34,12 +35,12 @@ def target(fleet: Fleet) -> str:
 
 @pytest.fixture(scope="session")
 def egress(fleet: Fleet) -> str:
-    return fleet.start(application(Proxy(key=KEY, timeout=10, connect=10, allow_local=True)))
+    return fleet.start(application(Proxy(key=SecretStr(KEY), timeout=10, connect=10, allow_local=True)))
 
 
 @pytest.fixture(scope="session")
 def impatient(fleet: Fleet) -> str:
-    return fleet.start(application(Proxy(key=KEY, timeout=0.1, connect=0.1, allow_local=True)))
+    return fleet.start(application(Proxy(key=SecretStr(KEY), timeout=0.1, connect=0.1, allow_local=True)))
 
 
 @pytest.fixture

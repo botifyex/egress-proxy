@@ -2,10 +2,11 @@ import socket
 from collections import Counter
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import TypeAlias
+from typing import TypeAlias, TypedDict, Unpack
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from egress_proxy.protocol import Failure, Header
 from egress_proxy.server.application import Application, application
@@ -43,18 +44,24 @@ def dead(unreachable: str) -> str:
     return unreachable.replace("http://", "socks5://")
 
 
+class Tuning(TypedDict, total=False):
+    cooldown: float
+    attempts: int
+    timeout: float
+
+
 class Egress:
-    def __init__(self, fleet: Fleet, upstreams: list[str], local: bool = True, **options: float) -> None:
-        proxy = Proxy(key=KEY, upstreams=upstreams, allow_local=local, **options)
+    def __init__(self, fleet: Fleet, upstreams: list[str], local: bool = True, **options: Unpack[Tuning]) -> None:
+        proxy = Proxy(key=SecretStr(KEY), upstreams=upstreams, allow_local=local, **options)
         self.application: Application = application(proxy)
         self.url = fleet.start(self.application)
 
-    def get(self, target: str, **options: object) -> httpx.Response:
-        headers = {Header.KEY: KEY, Header.TARGET: target}
-        return httpx.request("GET", self.url, headers=headers, timeout=10, **options)
+    def get(self, target: str) -> httpx.Response:
+        headers: dict[str, str] = {Header.KEY: KEY, Header.TARGET: target}
+        return httpx.get(self.url, headers=headers, timeout=10)
 
     def post(self, target: str, content: bytes) -> httpx.Response:
-        headers = {Header.KEY: KEY, Header.TARGET: target}
+        headers: dict[str, str] = {Header.KEY: KEY, Header.TARGET: target}
         return httpx.post(self.url, headers=headers, content=content, timeout=10)
 
     def resting(self) -> list[str]:
