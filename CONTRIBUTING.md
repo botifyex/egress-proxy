@@ -10,11 +10,12 @@ uv run ruff check src tests benchmarks
 uv run ruff format src tests benchmarks
 uv run basedpyright
 uv run egress-proxy
+docker build -t egress-proxy:dev . && tests/image.sh egress-proxy:dev
 ```
 
 Every push and pull request runs CI: ruff, basedpyright in strict mode, the test suite on
-Python 3.11–3.14 against both the lowest and the latest allowed dependencies, and a wheel smoke
-test.
+Python 3.11–3.14 against both the lowest and the latest allowed dependencies, a wheel smoke
+test, and `tests/image.sh` against the Docker image.
 
 ## Benchmarks
 
@@ -55,3 +56,6 @@ so no token is stored.
 
 One-time setup on PyPI → *Publishing* → *Add a new pending publisher*:
 owner `botifyex`, repository `egress-proxy`, workflow `publish.yaml`, environment `pypi`.
+
+The same release pushes the Docker image to `ghcr.io/botifyex/egress-proxy` with the workflow's own
+token. After the first one, check that the package is public under *Packages* → *Package settings*.

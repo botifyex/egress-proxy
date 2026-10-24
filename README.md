@@ -231,6 +231,32 @@ list. With `--workers` above 1 and few requests, the first proxies therefore get
 traffic. `PROXY__SHUFFLE=true` shuffles the list when a worker starts, with a cryptographically
 secure random generator, so each worker begins at a different proxy.
 
+## Docker
+
+Every release is published as `ghcr.io/botifyex/egress-proxy` for `linux/amd64` and
+`linux/arm64`, tagged with its version, `MAJOR.MINOR` and `latest`. The image runs the server as an
+unprivileged user, listens on `0.0.0.0:8000` and takes the same settings as environment variables;
+arguments after the image name go to `egress-proxy`:
+
+```sh
+docker run -d -p 8000:8000 -e PROXY__KEY=change-me ghcr.io/botifyex/egress-proxy --workers 4
+```
+
+With [Compose](https://github.com/botifyex/egress-proxy/blob/master/compose.yaml), put the
+settings in `.env` and the upstream proxies in `proxies.txt` next to `compose.yaml`; create
+`proxies.txt` even if it stays empty, or Docker mounts a directory in its place:
+
+```sh
+touch proxies.txt
+docker compose up -d
+```
+
+The example publishes the port on `127.0.0.1` only; expose it further behind HTTPS. Other containers
+are on private networks, so reaching them needs `PROXY__ALLOW_LOCAL=true`.
+
+The health check sends a request without a key to the container's own address and port
+`SERVER__PORT`; with `--port` on the command line, set `SERVER__PORT` instead so both agree.
+
 ## How it works
 
 The client sends each request to the server with the target URL and the key in headers. The

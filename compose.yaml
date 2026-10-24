@@ -1,0 +1,14 @@
+services:
+  egress-proxy:
+    image: ghcr.io/botifyex/egress-proxy:latest
+    env_file: .env
+    environment:
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: 8000
+      PROXY__UPSTREAMS_FILE: /config/proxies.txt
+    volumes:
+      - ./proxies.txt:/config/proxies.txt:ro
+    ports:
+      - 127.0.0.1:8000:8000
+    read_only: true
+    restart: unless-stopped

@@ -7,6 +7,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- Docker image `ghcr.io/botifyex/egress-proxy` for `linux/amd64` and `linux/arm64`, published with
+  every release and with build provenance attestations. It runs as an unprivileged user, works with
+  a read-only file system and reports its health; `compose.yaml` is a ready-made example.
+
 ## [0.2.0] - 2026-10-16
 
 ### Added
