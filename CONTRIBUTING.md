@@ -52,4 +52,4 @@ Publishing the release runs CI again and uploads the package to PyPI through Tru
 so no token is stored.
 
 One-time setup on PyPI → *Publishing* → *Add a new pending publisher*:
-owner `botifyex`, repository `egress-proxy`, workflow `publish.yml`, environment `pypi`.
+owner `botifyex`, repository `egress-proxy`, workflow `publish.yaml`, environment `pypi`.

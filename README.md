@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/egress-proxy)](https://pypi.org/project/egress-proxy/)
 [![Python](https://img.shields.io/pypi/pyversions/egress-proxy)](https://pypi.org/project/egress-proxy/)
-[![CI](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yml)
+[![CI](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yaml/badge.svg)](https://github.com/botifyex/egress-proxy/actions/workflows/ci.yaml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/botifyex/egress-proxy/blob/master/LICENSE)
 
 Send the HTTP requests of your Python project through your own server with a drop-in integration
