@@ -7,6 +7,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Request identifiers that a reverse proxy in front of the server stamps on every request
+  (`X-Request-Id`, `Request-Id`, `X-Correlation-Id`, `Correlation-Id`, `X-Cloud-Trace-Context`) no
+  longer reach the target, which could tell from them that the request passed through a gateway.
+
 ## [0.3.0] - 2026-10-24
 
 ### Added

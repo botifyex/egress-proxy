@@ -273,6 +273,8 @@ including those a load balancer or CDN in front of it adds:
   `client-ip`, `real-ip`, `remote-addr` or a similar fragment;
 - proxy and CDN markers: `Via`, `CF-Ray`, `CDN-Loop`, `X-Amzn-Trace-Id`, `X-Envoy-*`,
   `CloudFront-Viewer-*` and similar;
+- request identifiers that gateways stamp on every request: `X-Request-Id`, `Request-Id`,
+  `X-Correlation-Id`, `Correlation-Id`, `X-Cloud-Trace-Context`;
 - hop-by-hop headers, including every header named in `Connection` (RFC 9110), and `Proxy`
   (httpoxy).
 
