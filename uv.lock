@@ -391,7 +391,7 @@ toml = [
 
 [[package]]
 name = "egress-proxy"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 
 [package.optional-dependencies]
