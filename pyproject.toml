@@ -1,6 +1,6 @@
 [project]
 name = "egress-proxy"
-version = "0.3.1"
+version = "0.4.0"
 description = "Self-hosted egress proxy with drop-in integrations for Python HTTP clients and upstream HTTP/SOCKS rotation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -101,7 +101,7 @@ pythonVersion = "3.11"
 typeCheckingMode = "strict"
 
 [tool.bumpversion]
-current_version = "0.3.1"
+current_version = "0.4.0"
 commit = true
 tag = true
 tag_name = "v{new_version}"
