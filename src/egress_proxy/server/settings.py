@@ -23,6 +23,7 @@ class Proxy(BaseSettings):
     upstreams_file: Path | None = None
     cooldown: float = Field(default=30.0, ge=0)
     attempts: int = Field(default=3, ge=1)
+    probe: float = Field(default=10.0, ge=0)
     shuffle: bool = False
     allow_local: bool = False
 

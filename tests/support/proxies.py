@@ -39,6 +39,8 @@ class Proxy:
     user: str | None = None
     password: str | None = None
     port: int = 0
+    strict: bool = False
+    early: int = 0
     tunnels: int = 0
     targets: list[str] = field(default_factory=list)
 
@@ -50,9 +52,20 @@ class Proxy:
     def authorized(self, user: str, password: str) -> bool:
         return self.user is None or (user, password) == (self.user, self.password)
 
+    async def greeted(self, reader: asyncio.StreamReader) -> bool:
+        if not self.strict:
+            _, count = await reader.readexactly(2)
+            await reader.readexactly(count)
+            return True
+        first = await reader.read(65536)
+        if len(first) > 2 + first[1]:
+            self.early += 1
+            return False
+        return True
+
     async def socks(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> tuple[str, int] | None:
-        _, count = await reader.readexactly(2)
-        await reader.readexactly(count)
+        if not await self.greeted(reader):
+            return None
         if self.user is None:
             writer.write(b"\x05\x00")
         else:

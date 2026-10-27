@@ -7,6 +7,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- `PROXY__PROBE` (10 seconds by default, `0` turns it off): every worker checks its upstream
+  proxies in the background, so a proxy that accepts connections but never answers is left out
+  before a request waits `PROXY__CONNECT` seconds for it, and a recovered proxy returns without
+  waiting out `PROXY__COOLDOWN`.
+
+### Changed
+
+- A new SOCKS5 tunnel takes one round trip to the proxy instead of three: greeting, credentials and
+  tunnel request are sent together. A proxy that rejects them gets the step-by-step handshake from
+  then on.
+- An unreachable upstream proxy is logged once when it is left out and once when it is back,
+  instead of on every failed request.
+
 ## [0.3.1] - 2026-10-27
 
 ### Fixed

@@ -4,13 +4,15 @@ import ssl
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypedDict
 
 import aiohttp
 import certifi
-from aiohttp_socks import ProxyConnector
+from aiohttp_socks import ProxyConnector, ProxyType
 
 from egress_proxy.server.addresses import Guard
 from egress_proxy.server.settings import Proxy
+from egress_proxy.server.socks import Pipelined
 from egress_proxy.server.upstreams import Upstream, configured
 
 AUTOMATIC = ("User-Agent", "Accept", "Accept-Encoding", "Content-Type")
@@ -29,8 +31,18 @@ def direct(context: ssl.SSLContext, local: bool) -> aiohttp.BaseConnector:
     return aiohttp.TCPConnector(limit=0, ttl_dns_cache=300, ssl=context, resolver=resolver)
 
 
-def tunnel(upstream: Upstream, context: ssl.SSLContext) -> aiohttp.BaseConnector:
-    return ProxyConnector(
+class Endpoint(TypedDict):
+    host: str
+    port: int
+    proxy_type: ProxyType
+    username: str | None
+    password: str | None
+    rdns: bool
+    proxy_ssl: ssl.SSLContext | None
+
+
+def endpoint(upstream: Upstream, context: ssl.SSLContext) -> Endpoint:
+    return Endpoint(
         host=upstream.url.host or "",
         port=upstream.url.port or 0,
         proxy_type=upstream.scheme.kind,
@@ -38,10 +50,12 @@ def tunnel(upstream: Upstream, context: ssl.SSLContext) -> aiohttp.BaseConnector
         password=upstream.url.password,
         rdns=upstream.scheme.remote,
         proxy_ssl=context if upstream.scheme.secure else None,
-        limit=0,
-        ttl_dns_cache=300,
-        ssl=context,
     )
+
+
+def tunnel(upstream: Upstream, context: ssl.SSLContext) -> aiohttp.BaseConnector:
+    kind = Pipelined if upstream.scheme.kind is ProxyType.SOCKS5 else ProxyConnector
+    return kind(**endpoint(upstream, context), limit=0, ttl_dns_cache=300, ssl=context)
 
 
 def client(proxy: Proxy, connector: aiohttp.BaseConnector) -> aiohttp.ClientSession:
@@ -58,6 +72,7 @@ def client(proxy: Proxy, connector: aiohttp.BaseConnector) -> aiohttp.ClientSess
 class Route:
     name: str
     client: aiohttp.ClientSession
+    upstream: Upstream | None = None
     resting: float = 0.0
 
 
@@ -95,8 +110,15 @@ class Balancer:
         return self.ranked(ordered, now)[: self.attempts]
 
     def rest(self, route: Route) -> None:
-        route.resting = self.clock() + self.cooldown
-        log.warning("upstream proxy %s is unreachable, resting it for %g seconds", route.name, self.cooldown)
+        now = self.clock()
+        if route.resting <= now:
+            log.warning("upstream proxy %s is unreachable, resting it for %g seconds", route.name, self.cooldown)
+        route.resting = now + self.cooldown
+
+    def restore(self, route: Route) -> None:
+        if route.resting > self.clock():
+            log.warning("upstream proxy %s is reachable again", route.name)
+        route.resting = 0.0
 
     async def close(self) -> None:
         for route in self.routes:
@@ -107,7 +129,7 @@ def routes(proxy: Proxy, upstreams: list[Upstream]) -> list[Route]:
     context = trusted()
     if not upstreams:
         return [Route(DIRECT, client(proxy, direct(context, proxy.allow_local)))]
-    return [Route(upstream.name, client(proxy, tunnel(upstream, context))) for upstream in upstreams]
+    return [Route(upstream.name, client(proxy, tunnel(upstream, context)), upstream) for upstream in upstreams]
 
 
 def shuffled(upstreams: list[Upstream]) -> list[Upstream]:

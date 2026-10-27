@@ -1,4 +1,5 @@
 import socket
+import time
 from collections import Counter
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -9,12 +10,13 @@ import pytest
 from pydantic import SecretStr
 
 from egress_proxy.protocol import Failure, Header
+from egress_proxy.server import probes
 from egress_proxy.server.application import Application, application
 from egress_proxy.server.settings import Proxy
 from tests.support.commands import Unstarted, command
 from tests.support.proxies import Kind, Running, serve
 from tests.support.proxies import Proxy as Tunnel
-from tests.support.servers import KEY, Fleet
+from tests.support.servers import KEY, Fleet, bind
 
 Start: TypeAlias = Callable[..., Tunnel]
 
@@ -23,8 +25,13 @@ Start: TypeAlias = Callable[..., Tunnel]
 def tunnels() -> Iterator[Start]:
     running: list[Running] = []
 
-    def start(kind: Kind = "socks5", user: str | None = None, password: str | None = None) -> Tunnel:
-        running.append(serve(Tunnel(kind, user, password)))
+    def start(
+        kind: Kind = "socks5",
+        user: str | None = None,
+        password: str | None = None,
+        strict: bool = False,
+    ) -> Tunnel:
+        running.append(serve(Tunnel(kind, user, password, strict=strict)))
         return running[-1].proxy
 
     yield start
@@ -44,14 +51,31 @@ def dead(unreachable: str) -> str:
     return unreachable.replace("http://", "socks5://")
 
 
+@pytest.fixture
+def silent() -> Iterator[str]:
+    listener = bind()
+    listener.listen()
+    yield f"socks5://127.0.0.1:{listener.getsockname()[1]}"
+    listener.close()
+
+
+@pytest.fixture
+def probed(monkeypatch: pytest.MonkeyPatch, target: str) -> None:
+    host, port = target.removeprefix("http://").split(":")
+    monkeypatch.setattr(probes, "DESTINATION", (host, int(port)))
+
+
 class Tuning(TypedDict, total=False):
     cooldown: float
     attempts: int
     timeout: float
+    connect: float
+    probe: float
 
 
 class Egress:
     def __init__(self, fleet: Fleet, upstreams: list[str], local: bool = True, **options: Unpack[Tuning]) -> None:
+        options.setdefault("probe", 0)
         proxy = Proxy(key=SecretStr(KEY), upstreams=upstreams, allow_local=local, **options)
         self.application: Application = application(proxy)
         self.url = fleet.start(self.application)
@@ -68,6 +92,12 @@ class Egress:
         forward = self.application.forward
         assert forward is not None
         return [route.name for route in forward.balancer.routes if route.resting > forward.balancer.clock()]
+
+    def settled(self, expected: list[str]) -> list[str]:
+        deadline = time.monotonic() + 5
+        while self.resting() != expected and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return self.resting()
 
 
 @pytest.mark.parametrize("kind", ["socks5", "http"])
@@ -180,6 +210,99 @@ def test_timeout_after_tunnel_is_not_retried(local: Fleet, target: str, tunnels:
     response = egress.get(f"{target}/slow")
     assert response.status_code == 504
     assert sum(proxy.tunnels for proxy in proxies) == 1
+
+
+@pytest.mark.parametrize("credentials", [(None, None), ("user", "secret")])
+def test_socks5_handshake_is_sent_in_one_write(
+    local: Fleet,
+    target: str,
+    tunnels: Start,
+    credentials: tuple[str | None, str | None],
+) -> None:
+    proxy = tunnels("socks5", *credentials, strict=True)
+    response = Egress(local, [proxy.url]).get(f"{target}/echo")
+    assert response.status_code == 200
+    assert proxy.early == 1
+
+
+def test_proxy_refusing_early_data_gets_stepwise_handshakes_from_then_on(
+    local: Fleet,
+    target: str,
+    tunnels: Start,
+) -> None:
+    proxy = tunnels("socks5", "user", "secret", strict=True)
+    egress = Egress(local, [proxy.url])
+    named = target.replace("127.0.0.1", "localhost")
+    statuses = [egress.get(f"{origin}/echo").status_code for origin in (target, named)]
+    assert statuses == [200, 200]
+    assert proxy.tunnels == 2
+    assert proxy.early == 1
+
+
+def test_silent_upstream_is_rested_once_the_connect_timeout_passes(
+    local: Fleet,
+    target: str,
+    tunnels: Start,
+    silent: str,
+) -> None:
+    alive = tunnels("socks5")
+    egress = Egress(local, [silent, alive.url], connect=0.2)
+    assert egress.get(f"{target}/echo").status_code == 200
+    assert egress.resting() == [silent]
+
+
+def test_failed_tls_through_a_tunnel_is_reported_as_unreachable(local: Fleet, target: str, tunnels: Start) -> None:
+    proxy = tunnels("socks5")
+    response = Egress(local, [proxy.url]).get(f"{target.replace('http://', 'https://')}/echo")
+    assert response.status_code == 502
+    assert response.headers[Header.FAILURE] == Failure.UNREACHABLE
+
+
+@pytest.mark.usefixtures("probed")
+def test_probe_rests_a_silent_upstream_before_any_request(local: Fleet, tunnels: Start, silent: str) -> None:
+    alive = tunnels("socks5")
+    egress = Egress(local, [silent, alive.url], connect=0.5, probe=0.05)
+    assert egress.settled([silent]) == [silent]
+
+
+@pytest.mark.usefixtures("probed")
+def test_requests_do_not_wait_for_a_probed_silent_upstream(
+    local: Fleet,
+    target: str,
+    tunnels: Start,
+    silent: str,
+) -> None:
+    alive = tunnels("socks5")
+    egress = Egress(local, [silent, alive.url], connect=2, probe=0.05)
+    egress.settled([silent])
+    started = time.monotonic()
+    statuses = [egress.get(f"{target}/echo").status_code for _ in range(4)]
+    assert statuses == [200] * 4
+    assert time.monotonic() - started < 1
+
+
+@pytest.mark.usefixtures("probed")
+def test_probe_restores_a_rested_upstream_that_answers(local: Fleet, tunnels: Start) -> None:
+    alive = tunnels("socks5")
+    egress = Egress(local, [alive.url], cooldown=60, probe=0.05)
+    forward = egress.application.forward
+    assert forward is not None
+    forward.balancer.rest(forward.balancer.routes[0])
+    assert egress.settled([]) == []
+
+
+@pytest.mark.usefixtures("probed")
+def test_probe_keeps_an_upstream_that_refuses_the_tunnel(local: Fleet, tunnels: Start) -> None:
+    locked = tunnels("socks5", "user", "secret")
+    egress = Egress(local, [locked.url.replace("secret", "wrong")], probe=0.05)
+    time.sleep(0.3)
+    assert egress.resting() == []
+
+
+def test_probe_is_off_at_zero(local: Fleet, silent: str) -> None:
+    egress = Egress(local, [silent], probe=0)
+    assert egress.application.prober is not None
+    assert egress.application.prober.task is None
 
 
 def test_command_option_routes_workers_through_the_file(target: str, tunnels: Start, tmp_path: Path) -> None:

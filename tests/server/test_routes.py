@@ -81,6 +81,28 @@ def test_resting_logs_a_warning(caplog: pytest.LogCaptureFixture) -> None:
     assert "upstream proxy socks5://a.example.net:1080 is unreachable, resting it for 30 seconds" in caplog.text
 
 
+def test_repeated_rest_logs_once_and_extends_the_cooldown(caplog: pytest.LogCaptureFixture) -> None:
+    clock = Clock()
+    pool = routes("a")
+    subject = Balancer(pool, cooldown=30, attempts=1, clock=clock)
+    subject.rest(pool[0])
+    clock.now += 10
+    subject.rest(pool[0])
+    assert caplog.text.count("is unreachable") == 1
+    assert pool[0].resting == clock.now + 30
+
+
+def test_restore_returns_a_resting_route_and_logs_it(caplog: pytest.LogCaptureFixture) -> None:
+    clock = Clock()
+    pool = routes("a", "b")
+    subject = Balancer(pool, cooldown=30, attempts=2, clock=clock)
+    subject.rest(pool[0])
+    subject.restore(pool[0])
+    subject.restore(pool[1])
+    assert names(subject.candidates()) == ["a", "b"]
+    assert caplog.text.count("is reachable again") == 1
+
+
 async def test_close_closes_every_route() -> None:
     pool = routes("a", "b")
     await Balancer(pool, cooldown=30, attempts=1).close()

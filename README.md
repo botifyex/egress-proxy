@@ -148,6 +148,7 @@ precedence. Template: [`.env.example`](https://github.com/botifyex/egress-proxy/
 | `PROXY__UPSTREAMS` | `[]` | Upstream proxies inline, as a JSON list |
 | `PROXY__COOLDOWN` | `30` | Seconds an unreachable upstream proxy is left out |
 | `PROXY__ATTEMPTS` | `3` | Upstream proxies tried per request before giving up |
+| `PROXY__PROBE` | `10` | Seconds between background checks of every upstream proxy, `0` turns them off, see below |
 | `PROXY__SHUFFLE` | `false` | Shuffle upstream proxies at startup, separately in every worker, see below |
 | `PROXY__ALLOW_LOCAL` | `false` | Allow targets on local and private networks, see below |
 | `SERVER__HOST` | `127.0.0.1` | Address to listen on |
@@ -225,6 +226,17 @@ left out for `PROXY__COOLDOWN` seconds. A proxy that refuses the tunnel, for exa
 password or a target it cannot reach, is skipped for that request only. The client gets a 502 once
 `PROXY__ATTEMPTS` proxies have failed. An invalid proxy URL stops the server at startup with its
 file and line.
+
+Requests do not have to find dead proxies themselves: every `PROXY__PROBE` seconds each worker
+opens a tunnel through every proxy to `1.1.1.1:443` and closes it at once. A proxy that does not
+complete it within `PROXY__CONNECT` seconds is left out as above, before a request waits for it, and
+a resting proxy that completes it is back in rotation right away. A proxy that answers but refuses
+that tunnel counts as reachable. `PROXY__PROBE=0` turns the checks off.
+
+A SOCKS5 handshake goes out in one write, greeting, credentials and tunnel request together, so a
+new tunnel waits for one round trip to the proxy instead of three. A proxy that cannot take the
+requests ahead of its answers gets the usual step-by-step handshake from then on. `socks5h://` saves
+a DNS lookup on the egress server for every new tunnel as well.
 
 Every worker rotates through the proxies on its own, and each starts from the first one in the
 list. With `--workers` above 1 and few requests, the first proxies therefore get a little more

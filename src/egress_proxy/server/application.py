@@ -1,5 +1,6 @@
 from egress_proxy.server.asgi import Receive, Scope, Send
 from egress_proxy.server.forward import Forward
+from egress_proxy.server.probes import Prober
 from egress_proxy.server.routes import balancer
 from egress_proxy.server.settings import Proxy
 from egress_proxy.server.upstreams import configured
@@ -14,11 +15,18 @@ class Application:
         self.proxy = proxy
         self.upstreams = configured(proxy)
         self.forward: Forward | None = None
+        self.prober: Prober | None = None
 
     async def startup(self) -> None:
-        self.forward = Forward(balancer(self.proxy, self.upstreams), self.proxy)
+        balanced = balancer(self.proxy, self.upstreams)
+        self.forward = Forward(balanced, self.proxy)
+        self.prober = Prober(balanced, self.proxy.probe, self.proxy.connect)
+        self.prober.start()
 
     async def shutdown(self) -> None:
+        if self.prober is not None:
+            await self.prober.stop()
+            self.prober = None
         if self.forward is not None:
             await self.forward.balancer.close()
             self.forward = None
